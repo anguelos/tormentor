@@ -105,9 +105,7 @@ with torch.no_grad():
             if p.patch_width>0 and p.patch_height:
                 prediction = patch_forward(net, padded_img, p.patch_width, p.patch_height)[:,:,:img.size(2), :img.size(3)]
             else:
-                print("Size:", img.size())
-                prediction = net(padded_img[:,:,:1024,:1024])
-                prediction = prediction[:,:,:img.size(2), :img.size(3)]
+                prediction = net(padded_img)[:,:,:img.size(2), :img.size(3)]
             prediction = torch.nn.functional.softmax(prediction, dim=1)
             res = torch.cat([prediction,1-prediction],dim=1).detach()
 

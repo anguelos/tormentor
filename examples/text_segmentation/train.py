@@ -32,7 +32,7 @@ p={
     "save_images":False,
     "save_input_images":False,
     "self_pattern": "*png",
-    "arch":[("dunet34", "dunet18", "dunet50", "unet", "R2AttUNet", "AttUNet", "R2UNet", "UNet"), "Model Archtecture"],
+    "arch":[("dunet34","dunet18","dunet50","unet", "R2AttUNet", "AttUNet", "R2UNet", "UNet"),"Model Archtecture"],
     "rrds_root": "/home/anguelos/data/rr/focused_segmentation/zips",
     "dataset": [("rrds", "self_eval_2013", "dibco2010", "dibco2011", "dibco2012", "dibco2013", "dibco2014", "dibco2016", "dibco2017", "dibco2018", "dibco2019"), "Either Robust Reading Segmentation (rrds), or Document Image Binarization"],
     #"augmentation": "tormentor.RandomPlasmaBrightness & tormentor.RandomPerspective & tormentor.RandomHue & tormentor.RandomSaturation & tormentor.RandomInvert",
@@ -156,7 +156,7 @@ if p.dataset == "rrds":
     if p.train_augmentation != "":
         train_augmentation_cls = eval(p.train_augmentation)
         trainloader = tormentor.AugmentedDataLoader(trainloader, train_augmentation_cls, torch.device(p.tormentor_device), augment_RRDS_batch)
-        #test_augmentation_cls = eval(p.test_augmentation)
+        test_augmentation_cls = eval(p.test_augmentation)
     if p.val_augmentation != "":
         val_augmentation_cls = eval(p.train_augmentation)
         valloader = tormentor.AugmentedDataLoader(valloader, val_augmentation_cls, torch.device(p.tormentor_device), augment_RRDS_batch)

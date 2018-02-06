@@ -59,7 +59,7 @@ class TiledDataset(object):
                     total_counter += 1
             self.inverse_ends.append(total_counter)
 
-    def __init__(self, dataset, is_image_in_sample=None, tile_size=256, ltrb_pad=(64,64,64,64), input_transform=lambda x:x, output_transform=lambda x:x):
+    def __init__(self, dataset, is_image_in_sample=None, tile_size=256, ltrb_pad=(64,64,64,64), input_transform=None, output_transform=None):
         if is_image_in_sample is None:
             is_image_in_sample = [isinstance(datum, PIL.Image) for datum in dataset[0]]
         self.dataset = dataset
@@ -108,11 +108,17 @@ class TiledDataset(object):
         images = [sample[datum_idx] for sample in self.sample_as_list(sample_pos)]
 
 
+
+
+
+
+
+
+
 def modified_forward(self, input_x):
     if self.padding[0] > 0 or self.padding[1] > 0:
         batch_size, n_channels, height, width = input_x.size()
-        #x2d = input_x.view([batch_size * n_channels, height * width])
-        x2d = input_x.reshape([batch_size * n_channels, height * width])
+        x2d = input_x.view([batch_size * n_channels, height * width])
         mean = x2d.mean(dim=1).view([batch_size, n_channels, 1, 1])
         std = x2d.std(dim=1).view([batch_size, n_channels, 1, 1]) / (2*height+2*width)
         n_pad_left = self.padding[0]
