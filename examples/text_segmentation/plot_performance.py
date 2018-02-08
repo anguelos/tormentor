@@ -44,8 +44,14 @@ for model in p.models:
       ax[1][ax_n].plot(X[X<p.max_epoch],(Y[X<p.max_epoch]),".-",label=model)
 
 ax[0][0].legend()
+ax[0][0].grid()
+
 ax[1][0].legend()
+
+
 ax[0][1].legend()
+ax[0][1].grid()
 ax[1][1].legend()
+
 plt.show()
 
