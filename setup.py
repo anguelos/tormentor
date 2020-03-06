@@ -24,8 +24,7 @@ if __name__ == '__main__':
         tests_require=['pytest'],
 
         # Package info
-        packages=find_packages(exclude=('test', 'examples',)),
-
+        packages="tormentor",
         zip_safe=True,
         install_requires=requirements,
             classifiers=[

@@ -1,6 +1,8 @@
-from .base_augmentation import SpatialImageAugmentation
-import torch
 import types
+
+import torch
+
+from .base_augmentation import SpatialImageAugmentation
 
 
 class AugmentedImageDataset(torch.utils.data.Dataset):
@@ -11,7 +13,9 @@ class AugmentedImageDataset(torch.utils.data.Dataset):
         batch dimension with a size of 1. For segmentation data to be properly augmented, pixel labels must be encoded
         as one-hot encoding along the channel dimension.
     """
-    def __init__(self, dataset, augmentations, apply_on="guess", occurrence_prob=1.0, append_input_map=False):
+
+    def __init__(self, dataset, augmentations, apply_on="guess", occurrence_prob=1.0, append_input_map=False,
+                 train=None):
         """Augments a pytorch dataset with some augmentations.
 
         :param dataset: A pytorch dataset to be wrapped and augmented.
@@ -27,6 +31,13 @@ class AugmentedImageDataset(torch.utils.data.Dataset):
             each pixel after the augmentation.
         """
         assert apply_on in ["all", "first", "last", "guess"] or isinstance(apply_on, (list, tuple))
+        if train is None:
+            try:
+                self.train = dataset.train
+            except AttributeError:
+                self.train = None
+        else:
+            self.train = train
         if not isinstance(apply_on, (list, tuple)):
             tensor_count = len(dataset[0])
             if apply_on == "all":
@@ -38,7 +49,7 @@ class AugmentedImageDataset(torch.utils.data.Dataset):
             elif apply_on == "guess":
                 sample = dataset[0]
                 width, height = sample[0].size()[-2:]
-                apply_on = [(isinstance(t,torch.Tensor) and len(t.size())>=2 and
+                apply_on = [(isinstance(t, torch.Tensor) and len(t.size()) >= 2 and
                              t.size(-2) == width and t.size(-1) == height) for t in sample]
         self.append_input_map = append_input_map
         if append_input_map:
@@ -55,7 +66,8 @@ class AugmentedImageDataset(torch.utils.data.Dataset):
             elif issubclass(augmentation, SpatialImageAugmentation):
                 self.augmentation_factories.append(augmentation.factory())
             else:
-                raise ValueError("augmentation must be either a DeterministicImageAugmentation or a lambda producing them.")
+                raise ValueError(
+                    "augmentation must be either a DeterministicImageAugmentation or a lambda producing them.")
 
     def __len__(self):
         return len(self.dataset)
@@ -68,11 +80,11 @@ class AugmentedImageDataset(torch.utils.data.Dataset):
             return sample
         else:
             augmentations = [f() for f in self.augmentation_factories]
-            augmented_sample=[]
+            augmented_sample = []
             for should_apply, sample_tensor in zip(self.apply_on, sample):
                 if should_apply:
                     for augmentation in augmentations:
-                        sample_tensor=augmentation(sample_tensor)
+                        sample_tensor = augmentation(sample_tensor)
                     augmented_sample.append(sample_tensor)
                 else:
                     augmented_sample.append(sample_tensor)
