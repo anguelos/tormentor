@@ -3,12 +3,13 @@ import math
 import torch
 
 
-def diamond_square(desired_size=None, replicates=1, channels=1, output_range=None, recursion_depth=None, roughness=.5,
+def diamond_square(size=None, replicates=1, output_range=None, recursion_depth=None, roughness=.5,
                    device=None, seed_img=None, return_2d=False):
     # TODO (anguelos) apply these parameters on the results
-    if desired_size is not None:
+    if size is not None:
         assert recursion_depth is None
-        recursion_depth = max(math.log2(desired_size[0]), math.log2(desired_size[1])) + 1
+        recursion_depth = max(math.log2(size[0]-1), math.log2(size[1]-1))
+        recursion_depth = int(math.ceil(recursion_depth))
     else:
         assert recursion_depth is not None
     if output_range is None:
@@ -22,7 +23,7 @@ def diamond_square(desired_size=None, replicates=1, channels=1, output_range=Non
 
         if seed_img is None:
             # TODO (anguelos) create non 3x3 seed image
-            seed_img = torch.rand(replicates, channels, 3, 3).to(device)
+            seed_img = torch.rand(replicates, 1, 3, 3).to(device)
 
             # first diamond
             rnd_range = 1.0 * roughness
@@ -60,10 +61,13 @@ def diamond_square(desired_size=None, replicates=1, channels=1, output_range=Non
             epsilon = .00000001
             img_max = img.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=2)
             img_min = img.min(dim=2)[0].min(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=2)
-            img = (img - img_min) / (epsilon + img_min - img_max)
+            img = (img - img_min) / (epsilon + img_max - img_min)
             img = img * (output_range[1] - output_range[0]) + output_range[0]
+        if size is not None:
+            # TODO(anguelos) make sure there is no bias by cropping on the to left bias
+            img = img[:, :, :size[0], :size[1]]
         if return_2d:
-            assert replicates == channels == 1
+            assert replicates == 1
             return img[0, 0, :, :]
         else:
             return img
@@ -84,13 +88,14 @@ def one_diamond_one_square(img, roughness):
     """
     # TODO (anguelos) test multi channel and batch size > 1
 
+    batch_sz, _, _, _ = img.size()
     diamond_kernel = [[.25, 0., .25], [0., 0., 0.], [.25, 0., .25]]
     square_kernel = [[0., .25, 0.], [.25, 0., .25], [0., .25, 0.]]
     square_kernel = torch.tensor(square_kernel).unsqueeze(dim=0).unsqueeze(dim=0).to(img.device)
     diamond_kernel = torch.tensor(diamond_kernel).unsqueeze(dim=0).unsqueeze(dim=0).to(img.device)
     step = 2
-    new_img = torch.zeros([1, 1, 2 * (img.shape[2] - 1) + 1, 2 * (img.shape[3] - 1) + 1], device=img.device)
-    new_img[:1, :1, ::step, ::step] = img
+    new_img = torch.zeros([batch_sz, 1, 2 * (img.shape[2] - 1) + 1, 2 * (img.shape[3] - 1) + 1], device=img.device)
+    new_img[:, :, ::step, ::step] = img
 
     pad_compencate = torch.ones_like(new_img)
     pad_compencate[:, :, :, 0] = 1 / .75
