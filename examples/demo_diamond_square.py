@@ -17,7 +17,8 @@ params = {
 if __name__ == "__main__":
     params, _ = fargv.fargv(params, return_named_tuple=True)
     duration = timeit.timeit(setup="from diamond_square import diamond_square",
-                             stmt="img = diamond_square(recursion_depth=10, device={})".format(repr(params.device)),
+                             stmt="img = diamond_square(recursion_depth={}, device={})".format(params.recursion_depth,
+                                                                                               repr(params.device)),
                              number=params.repeat)
     print(f"Created {(2**10+1)**2/1000000} MPixels {params.repeat} times in {duration} sec.")
     if params.do_show:
