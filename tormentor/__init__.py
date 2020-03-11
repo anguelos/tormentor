@@ -13,7 +13,7 @@ General design principles:
 from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation
 from .spatial_augmentations import *
 from .augmented_dataset import ImageAugmentationPipelineDataset
-from .wet_paper import WetPaperAugmentation
+from .wrap import WrapAugmentation
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
 __all__ = [
@@ -27,6 +27,6 @@ __all__ = [
     "Scale",
     "Rotate",
     "ImageAugmentationPipelineDataset",
-    "WetPaperAugmentation",
+    "WrapAugmentation",
     "reset_all_seeds"
 ]
