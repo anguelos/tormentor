@@ -3,16 +3,37 @@ import math
 import torch
 
 
-def diamond_square(size=None, replicates=1, output_range=None, recursion_depth=None, roughness=.5,
-                   device=None, seed_img=None, return_2d=False):
-    # TODO (anguelos) apply these parameters on the results
-    if size is not None:
+# For avoiding division by zero
+_epsilon = .00000001
+
+
+# noinspection PyPackageRequirements
+def diamond_square(width_height=None, replicates=1, output_range=None, recursion_depth=None, roughness=.5,
+                   device=None, seed_img=None, return_2d=False, output_deviation_mean=None) -> torch.Tensor:
+    """Generates Plasma Fractal Images
+
+    Args:
+        width_height: A tuple of integers with the width and height of the image to be generated.
+        replicates: An integer indicating how may diamond squares to compute in total.
+        output_range: A tuple of floats indicating the range to which the fractals will be normalised. Must be None if output_deviation_mean is not None. If None
+        recursion_depth:
+        roughness:
+        device:
+        seed_img:
+        return_2d:
+        output_deviation_mean:
+
+    Returns:
+
+    """
+
+    if width_height is not None:
         assert recursion_depth is None
-        recursion_depth = max(math.log2(size[0]-1), math.log2(size[1]-1))
+        recursion_depth = max(math.log2(width_height[0] - 1), math.log2(width_height[1] - 1))
         recursion_depth = int(math.ceil(recursion_depth))
     else:
         assert recursion_depth is not None
-    if output_range is None:
+    if output_range is None and output_deviation_mean is None:
         output_range = [0.0, 1.0]
 
     with torch.no_grad():
@@ -58,14 +79,21 @@ def diamond_square(size=None, replicates=1, output_range=None, recursion_depth=N
             img = one_diamond_one_square(img, rnd_range)
             rnd_range *= roughness
         if output_range is not None:
-            epsilon = .00000001
             img_max = img.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=2)
             img_min = img.min(dim=2)[0].min(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=2)
-            img = (img - img_min) / (epsilon + img_max - img_min)
+            img = (img - img_min) / (_epsilon + img_max - img_min)
             img = img * (output_range[1] - output_range[0]) + output_range[0]
-        if size is not None:
+        elif output_deviation_mean is not None:
+            # standarizing image
+            img = img - img.mean(dim=2).mean(dim=2).unsqueeze(dim=2).unsqueeze(dim=2)
+            img = img / (img.std(dim=2).std(dim=2).unsqueeze(dim=2).unsqueeze(dim=2) + _epsilon)
+            # setting mean and deviation
+            img = img * (output_deviation_mean[0]) + output_deviation_mean[1]
+
+
+        if width_height is not None:
             # TODO(anguelos) make sure there is no bias by cropping on the to left bias
-            img = img[:, :, :size[0], :size[1]]
+            img = img[:, :, :width_height[0], :width_height[1]]
         if return_2d:
             assert replicates == 1
             return img[0, 0, :, :]
