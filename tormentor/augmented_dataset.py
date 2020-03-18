@@ -53,11 +53,10 @@ class AugmentationDataset(torch.utils.data.Dataset):
     def __getitem__(self, item):
         augmentation = self.augmentation_factory()
         sample = self.dataset[item]
+        sample = tuple([augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
         if self.append_input_map:
-            result = (augmentation(s) for s in tuple(sample) + (torch.ones_like(sample[0]),))
-        else:
-            result = (augmentation(s) for s in tuple(sample))
-        return result
+            sample =  sample + (augmentation(torch.ones_like(sample[0])),)
+        return sample
 
 
 class ImageAugmentationPipelineDataset(torch.utils.data.Dataset):

@@ -10,7 +10,7 @@ import math
 # Simple example of using the augmentatio n API
 class Rotate(SpatialImageAugmentation):
     def forward(self, tensor_image):
-        self.rotate_radians = (torch.rand([1]) + self.min_angle)*(self.max_angle-self.min_angle)
+        self.rotate_radians = (torch.rand([tensor_image.size(0)]) + self.min_angle)*(self.max_angle-self.min_angle)
         # TODO (anguelos) is there a better way than self. to store angles or other variables defining the augmentation?
         rotate_degrees = (self.rotate_radians * 180) / math.pi
         return kornia.geometry.rotate(tensor_image,rotate_degrees)

@@ -14,6 +14,7 @@ from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentatio
 from .spatial_augmentations import *
 from .augmented_dataset import ImageAugmentationPipelineDataset
 from .wrap import WrapAugmentation
+from .augmented_dataset import AugmentationDataset, ImageAugmentationPipelineDataset
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
 __all__ = [
@@ -28,5 +29,7 @@ __all__ = [
     "Rotate",
     "ImageAugmentationPipelineDataset",
     "WrapAugmentation",
+    "AugmentationDataset",
+    "ImageAugmentationPipelineDataset",
     "reset_all_seeds"
 ]

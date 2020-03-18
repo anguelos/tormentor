@@ -2,6 +2,16 @@ import torch
 from itertools import count
 
 
+#from enum import Enum
+#class DataForm():
+#   IMAGE
+#   BINARY_MAP
+#   POINTS
+#   RECTANGLES
+#   POLYGONS
+# TODO(anguelos) add dataset roles
+
+
 class DeterministicImageAugmentation(object):
     """Deterministic augmentation functor and its factory.
 
@@ -43,6 +53,7 @@ class DeterministicImageAugmentation(object):
         # TODO (anguelos) if this self.__dict__ hack is gone, DeterministicImageAugmentation can inherit from torch.nn.Module
 
     def __call__(self, tensor_image):
+        print("Call happened")
         device = tensor_image.device
         with torch.random.fork_rng(devices=(device,)):
             torch.manual_seed(self.seed)
