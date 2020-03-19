@@ -1,6 +1,30 @@
 import torch
 from itertools import count
 
+from functools import wraps
+
+
+class factory():
+    def __init__(self):
+        pass
+    def __call__(self):
+        pass
+
+
+def factory(func):
+    """Decorate an augmentation to make a factory.
+    """
+    @wraps(func)
+    def factory(*args, **kwargs):
+        #print args, kwargs
+        return func(*args, **kwargs)
+    return factory
+
+def torment_parameters(**kwargs):
+    def modify_datamemebers(cls):
+
+        setattr(__init__,'factory2',factory2)
+    return cls
 
 #from enum import Enum
 #class DataForm():
@@ -61,7 +85,7 @@ class DeterministicImageAugmentation(object):
 
     def __repr__(self):
         # TODO (anguelos) make eval(repr(a)) a copy constructor. what about self.id and self.seed?
-        parameters = "("+" ".join([",{}={}".format(k,repr(v)) for k,v in self._params.items()])+")"
+        parameters = "("+", ".join(["{}={}".format(k,repr(v)) for k,v in self._params.items()])+")"
         return self.__class__.__name__ + parameters
 
     def __eq__(self, obj):
@@ -87,6 +111,17 @@ class DeterministicImageAugmentation(object):
         :return: A lambda that generates instances of deterministic image augmentors
         """
         raise NotImplementedError()
+
+
+    def new(self):
+        kw = self._params.copy()
+        del kw["id"]
+        del kw["seed"]
+        return type(self)(**kw)
+
+    @classmethod
+    def create(cls,**kwargs):
+        return cls.factory(**kwargs)()
 
     @property
     def preserves_geometry(self):

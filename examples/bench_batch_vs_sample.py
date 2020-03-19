@@ -58,9 +58,10 @@ import torch
 import tormentor
 import kornia
 
+
 # About issue https://discuss.pytorch.org/t/not-using-multiprocessing-but-getting-cuda-error-re-forked-subprocess/54610/7
-torch.multiprocessing.set_start_method('spawn')
-#torch.multiprocessing.set_start_method('forkserver', force=True)
+#torch.multiprocessing.set_start_method('spawn')
+torch.multiprocessing.set_start_method('forkserver', force=True)
 
 
 dataset=[(torch.rand(1, {args.image_channels}, {args.image_width}, {args.image_height}), 0) for _ in range({args.dataset_size})]

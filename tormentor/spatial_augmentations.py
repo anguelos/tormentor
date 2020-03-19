@@ -1,4 +1,4 @@
-from .base_augmentation import SpatialImageAugmentation
+from .base_augmentation import SpatialImageAugmentation, torment_parameters
 from .backgrounds import *
 
 import torch
@@ -8,21 +8,24 @@ import math
 
 
 # Simple example of using the augmentatio n API
+#@torment_parameters(min_angle=-math.pi, max_angle=math.pi)
 class Rotate(SpatialImageAugmentation):
     def forward(self, tensor_image):
         self.rotate_radians = (torch.rand([tensor_image.size(0)]) + self.min_angle)*(self.max_angle-self.min_angle)
         # TODO (anguelos) is there a better way than self. to store angles or other variables defining the augmentation?
         rotate_degrees = (self.rotate_radians * 180) / math.pi
-        return kornia.geometry.rotate(tensor_image,rotate_degrees)
+        return kornia.geometry.rotate(tensor_image, rotate_degrees)
 
     @classmethod
     def factory(cls, min_angle=-math.pi, max_angle=math.pi):
-        return lambda: cls(min_angle=min_angle, max_angle=max_angle)
+        def create():
+            return cls(min_angle=min_angle, max_angle=max_angle)
+        return create
+        #return lambda: cls(min_angle=min_angle, max_angle=max_angle)
 
 
 class Scale(SpatialImageAugmentation):
-    """Implementation of augmentation by scaling images
-
+    """Implementation of augmentation by scaling images.
     """
     def forward(self, tensor_image):
         if self.joint:

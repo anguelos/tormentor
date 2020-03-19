@@ -43,7 +43,7 @@ def _get_augmentation_subjects_from_dataset(dataset, where, augmentation):
 class AugmentationDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, augmentation_factory, apply_on="guess",append_input_map=False):
         self.dataset = dataset
-        self.augmentation_factory = augmentation_factory
+        self.augmentation = augmentation_factory()
         self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on, augmentation=augmentation_factory())
         self.append_input_map = append_input_map
 
@@ -51,11 +51,11 @@ class AugmentationDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, item):
-        augmentation = self.augmentation_factory()
+        self.augmentation = self.augmentation.new()
         sample = self.dataset[item]
-        sample = tuple([augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
+        sample = tuple([self.augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
         if self.append_input_map:
-            sample =  sample + (augmentation(torch.ones_like(sample[0])),)
+            sample = sample + (self.augmentation(torch.ones_like(sample[0])),)
         return sample
 
 
