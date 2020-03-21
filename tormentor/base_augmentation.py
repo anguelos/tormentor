@@ -1,56 +1,43 @@
 import torch
 from itertools import count
+import types
 
 from functools import wraps
 
 
-class factory():
-    def __init__(self):
-        pass
-    def __call__(self):
-        pass
+class AugmentationFactory(torch.nn.Module):
+    def __init__(self, augmentation_cls, **kwargs):
+        super().__init__()
+        assert set(kwargs.keys()) <= set(augmentation_cls.default_params.keys())
+        self.augmentation_params = kwargs
+        self.augmentation_cls = augmentation_cls
 
+    def forward(self, x=None):
+        if x is None:
+            return self.augmentation_cls(**self.augmentation_params)
+        else:
+            return self.new()(x)
 
-def factory(func):
-    """Decorate an augmentation to make a factory.
-    """
-    @wraps(func)
-    def factory(*args, **kwargs):
-        #print args, kwargs
-        return func(*args, **kwargs)
-    return factory
-
-def torment_parameters(**kwargs):
-    def modify_datamemebers(cls):
-
-        setattr(__init__,'factory2',factory2)
-    return cls
-
-#from enum import Enum
-#class DataForm():
-#   IMAGE
-#   BINARY_MAP
-#   POINTS
-#   RECTANGLES
-#   POLYGONS
-# TODO(anguelos) add dataset roles
+    def new(self):
+        return self.augmentation_cls(**self.augmentation_params)
 
 
 class DeterministicImageAugmentation(object):
     """Deterministic augmentation functor and its factory.
 
     This class is the base class realising an augmentation.
-    In order to create a new augmentation the forward method and the factory class-function have to be defined.
+    In order to create a new augmentation the forward_sample method and the factory class-function have to be defined.
     If a constructor is defined it must call super().__init__(**kwargs).
 
     The **kwargs on the constructor define all needed variables for generating random augmentations.
     The factory method returns a lambda that instanciates augmentatations.
     Any parameter about the augmentations randomness should be passed by the factory to the constructor and used inside
-    forward's definition.
+    forward_sample's definition.
     """
     _ids = count(0)
     # since instance seeds are the global seed plus the instance counter, starting from 1000000000 makes a collision
     # highly improbable. Although no guaranty of uniqueness of instance seed is made.
+    # in case of a multiprocess parallelism, this minimizes chances of collision
     _global_seed = torch.LongTensor(1).random_(1000000000, 2000000000).item()
 
     @staticmethod
@@ -61,38 +48,46 @@ class DeterministicImageAugmentation(object):
         SpatialImageAugmentation._global_seed = global_seed
 
 
-    def __init__(self, **kwargs):
+    def __init__(self, id, seed):
         # TODO (anguelos) maybe checking for id and seed is redundant?
-        if "id" not in kwargs.keys():
+        if id is None:
             self.id = next(SpatialImageAugmentation._ids)
         else:
-            self.id = kwargs["id"]
-        if "seed" not in kwargs.keys():
+            self.id = id
+        if seed is None:
             self.seed = self.id + SpatialImageAugmentation._global_seed
         else:
-            self.seed = kwargs["seed"]
-        self._params = kwargs
-        self._params.update({"id":self.id,"seed":self.seed})
-        self.__dict__.update(**kwargs)
-        # TODO (anguelos) if this self.__dict__ hack is gone, DeterministicImageAugmentation can inherit from torch.nn.Module
+            self.seed = seed
 
     def __call__(self, tensor_image):
-        print("Call happened")
         device = tensor_image.device
         with torch.random.fork_rng(devices=(device,)):
             torch.manual_seed(self.seed)
-            return self.forward(tensor_image)
+            if len(tensor_image.size()) == 3:
+                return self.forward_sample(tensor_image)
+            else:
+                return self.forward_batch(tensor_image)
 
     def __repr__(self):
-        # TODO (anguelos) make eval(repr(a)) a copy constructor. what about self.id and self.seed?
-        parameters = "("+", ".join(["{}={}".format(k,repr(v)) for k,v in self._params.items()])+")"
-        return self.__class__.__name__ + parameters
+        param_names = type(self).default_params.keys()
+        param_names = ("id", "seed") + tuple(param_names)
+        param_assignments = ", ".join(["{}={}".format(k, repr(self.__dict__[k])) for k in param_names])
+        return self.__class__.__name__ + "(" + param_assignments + ")"
 
     def __eq__(self, obj):
         return self.__class__ is obj.__class__ and self.id == obj.id and self.seed == obj.seed
 
-    # Methods for extending the class
-    def forward(self, tensor_image):
+    def __str__(self):
+        functions = (types.BuiltinFunctionType, types.BuiltinMethodType, types.FunctionType)
+        attribute_strings = []
+        for name in self.__dict__.keys():
+            attribute = getattr(self, name)
+            if (not isinstance(attribute, functions)) and (not name.startswith("__")):
+                attribute_strings.append(f"{name}:{repr(attribute)}")
+        return self.__class__.__name__ + ":\n\t" + "\n\t".join(attribute_strings)
+
+
+    def forward_sample(self, tensor_image):
         """Distorts a single image.
 
         Abstract method that must be implemented by all augmentations.
@@ -102,30 +97,52 @@ class DeterministicImageAugmentation(object):
         """
         raise NotImplementedError()
 
-    @classmethod
-    def factory(cls):
-        """Creates a lambda expression that is a factory of image augmentations.
 
-        This function must be implemented by any child class.
+    def forward_batch(self, batch_tensor):
+        """Distorts a a batch of one or more images.
 
-        :return: A lambda that generates instances of deterministic image augmentors
+        :param batch_tensor: Images are 4D tensors of [batch_size, #channels, width, height] size.
+        :return: A new 4D tensor [batch_size, #channels, width, height] with the new image.
         """
-        raise NotImplementedError()
+        augmented_tensors = []
+        for n in range(batch_tensor.size(0)):
+            aug = self.like_me()
+            augmented_tensors.append(aug.forward_sample(batch_tensor[n, :, :, :]))
+        return torch.cat(augmented_tensors, dim=0)
 
-
-    def new(self):
-        kw = self._params.copy()
-        del kw["id"]
-        del kw["seed"]
-        return type(self)(**kw)
 
     @classmethod
-    def create(cls,**kwargs):
-        return cls.factory(**kwargs)()
+    def factory(cls, **kwargs):
+        return AugmentationFactory(cls, **kwargs)
+
 
     @property
     def preserves_geometry(self):
         raise NotImplementedError()
+
+
+def aug_parameters(**kwargs):
+    """Decorator that assigns parameters to augmentation and creates the augmentation's constructor.
+
+    """
+    default_params = kwargs
+
+    def register_default_random_parameters(cls):
+        setattr(cls, "default_params", default_params.copy())
+
+        # Creating dynamically a constructor
+        rnd_param = "\n\t".join((f"self.{k} = {k}" for k, v in default_params.items()))
+        default_params["id"] = None
+        default_params["seed"] = None
+        param_str = ", ".join((f"{k}={repr(v)}" for k, v in default_params.items()))
+        constructor_str = f"def __init__(self, {param_str}):\n\tDeterministicImageAugmentation.__init__(self, id=id, seed=seed)\n\t{rnd_param}"
+        exec_locals = {"__class__": cls}
+        print(constructor_str)
+        exec(constructor_str, globals(), exec_locals)
+        setattr(cls, "__init__", exec_locals["__init__"])
+        return cls
+    return register_default_random_parameters
+
 
 
 class ChannelImageAugmentation(DeterministicImageAugmentation):
@@ -138,3 +155,4 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
     @property
     def preserves_geometry(self):
         return False
+

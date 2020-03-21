@@ -1,5 +1,3 @@
-from .base_augmentation import ChannelImageAugmentation
+from .base_augmentation import ChannelImageAugmentation, aug_parameters
 
-
-class ApplyColorProfile():
-    pass
+pass

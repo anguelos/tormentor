@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import timeit
-
 #pip3 install --user fargv # You won't regret it ;-)
 import fargv
 
@@ -14,12 +13,15 @@ args = {
     "image_channels": 3,
     "device": "cpu",
     "augmentation": ("Rotate", "Flip"),
-    "forward": (False,
-                "Should a forward pass be added to estimate the overall effect of the augmentation to the training."
+    "print_setup": False,
+    "print_setup_lines": False,
+    "by_batch": False,
+    "forward_sample": (False,
+                "Should a forward_sample pass be added to estimate the overall effect of the augmentation to the training."
                 "Image size must be 3x224x224 if this is enabled"),
     "backward": (False,
                  "Should a backward pass be added to estimate the overall effect of the augmentation to the training,"
-                 " if forward is false, this is ignored")
+                 " if forward_sample is false, this is ignored")
 }
 
 args, _ = fargv.fargv(args)
@@ -60,8 +62,8 @@ import kornia
 
 
 # About issue https://discuss.pytorch.org/t/not-using-multiprocessing-but-getting-cuda-error-re-forked-subprocess/54610/7
-#torch.multiprocessing.set_start_method('spawn')
-torch.multiprocessing.set_start_method('forkserver', force=True)
+torch.multiprocessing.set_start_method('spawn')
+#torch.multiprocessing.set_start_method('forkserver', force=True)
 
 
 dataset=[(torch.rand(1, {args.image_channels}, {args.image_width}, {args.image_height}), 0) for _ in range({args.dataset_size})]
@@ -69,7 +71,7 @@ dataset=[(torch.rand(1, {args.image_channels}, {args.image_width}, {args.image_h
 # Tormentor per sample augmentation
 augmentation_factory = tormentor.{args.augmentation}.factory()
 augmented_dataset = tormentor.AugmentationDataset(dataset, augmentation_factory)
-per_sample_loader = torch.utils.data.DataLoader(augmented_dataset,num_workers={args.num_workers},batch_size={args.batch_size})
+per_sample_loader = torch.utils.data.DataLoader(augmented_dataset,num_workers={args.num_workers},batch_size={args.batch_size}, collate_fn=lambda x:torch.cat(x, dim=0))
 
 # Minibatch augmentation
 per_batch_unaugmented_loader = torch.utils.data.DataLoader(dataset, num_workers={args.num_workers},batch_size={args.batch_size})
@@ -94,7 +96,7 @@ def run_epoch(by_batch):
         data_loader = per_sample_loader
     for inputs, targets in data_loader:
         inputs, targets = inputs.to({repr(args.device)}), targets.to({repr(args.device)})
-        if {repr(args.forward)}:
+        if {repr(args.forward_sample)}:
             output=net(inputs)
             loss=criterion(output,targets)
             if {repr(args.backward)}:
@@ -105,9 +107,15 @@ print("Setup Complete")
 """
 
 if __name__ == "__main__":
-    for n,line in enumerate(setup_str.split("\n")):
-        print(n,":",line)
-    by_batch = timeit.timeit(setup=setup_str, stmt="run_epoch(by_batch=True)", number=args.repeat)
-    by_sample = timeit.timeit(setup=setup_str, stmt="run_epoch(by_batch=False)", number=args.repeat)
-    print(f"By Batch duration {by_batch} sec.")
-    print(f"By Sample duration {by_sample} sec.")
+    if args.print_setup:
+        for n,line in enumerate(setup_str.split("\n")):
+            if args.print_setup_lines:
+                print(n,":",line)
+            else:
+                print(line)
+    if args.by_batch:
+        by_batch = timeit.timeit(setup=setup_str, stmt="run_epoch(by_batch=True)", number=args.repeat)
+        print(f"By Batch duration {by_batch} sec.")
+    else:
+        by_sample = timeit.timeit(setup=setup_str, stmt="run_epoch(by_batch=False)", number=args.repeat)
+        print(f"By Sample duration {by_sample} sec.")
