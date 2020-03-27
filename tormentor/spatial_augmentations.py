@@ -1,5 +1,5 @@
-from .base_augmentation import SpatialImageAugmentation, aug_parameters
-from .backgrounds import *
+from .base_augmentation import SpatialImageAugmentation, aug_parameters, aug_distributions
+from .random import Uniform, Uniform2D, Bernoulli, Categorical
 
 import torch
 import torch.nn.functional as F
@@ -7,56 +7,63 @@ import kornia
 import math
 
 
-# Simple example of using the augmentatio n API
-@aug_parameters(min_angle=-math.pi, max_angle=math.pi)
+# Fully diferentiable augmentation
+@aug_distributions(rotate_radians=Uniform((-3.1415, 3.1415)))
 class Rotate(SpatialImageAugmentation):
-    def forward_sample(self, tensor_image):
-        self.rotate_radians = (torch.rand([tensor_image.size(0)]) + self.min_angle)*(self.max_angle-self.min_angle)
-        # TODO (anguelos) is there a better way than self. to store angles or other variables defining the augmentation?
-        rotate_degrees = (self.rotate_radians * 180) / math.pi
+    def forward_batch_img(self, tensor_image):
+        rotate_degrees = self.rotate_radians(tensor_image.size(0)).view(-1) * 180/math.pi
         return kornia.geometry.rotate(tensor_image, rotate_degrees)
 
 
-@aug_parameters(min_scale=.5, max_scale=2.0, joint=False)
+
+@aug_distributions(scales=Uniform2D(location=(.5, 1.5)))
 class Scale(SpatialImageAugmentation):
     """Implementation of augmentation by scaling images.
     """
-    def forward_sample(self, tensor_image):
-        tensor_image.usqueeze(dim=0)
-        if self.joint:
-            scale = (torch.rand(1) * (self.max_scale - self.min_scale) + self.min_scale).item()
-            result = F.interpolate(tensor_image, scale_factor=[scale, scale], mode='bilinear', align_corners=True)
-        else:
-            width_height_ratios = (torch.rand(2) * (self.max_scale - self.min_scale) + self.min_scale)
-            result = F.interpolate(tensor_image, scale_factor=width_height_ratios, mode='bilinear', align_corners=True)
+    def forward_sample_img(self, tensor_image):
+        scale_x, scale_y = self.scales()
+        result = F.interpolate(tensor_image.unsqueeze(dim=0), scale_factor=(scale_x, scale_y), mode='bilinear', align_corners=True)
         return result[0, :, :, :]
 
-@aug_parameters(horizontal_prob=.5, vertical_prob=.5)
+
+@aug_distributions(horizontal=Bernoulli(.5), vertical=Bernoulli(.5))
 class Flip(SpatialImageAugmentation):
-    def forward_sample(self, tensor_image):
-        dim_thresholds = torch.Tensor([1.0, 1.0, self.horizontal_prob, self.vertical_prob])
-        rnd = torch.rand(4)
-        flip_dims = torch.nonzero(rnd > dim_thresholds).view(-1)
-        flip_dims = tuple(flip_dims.tolist())  # TODO (anguelos) can we use a tensor instead of a list
+    def forward_sample_img(self, tensor_image):
+        flip_dims = [False, self.horizontal(), self.vertical()]
+        flip_dims = [n for n in range(len(flip_dims)) if flip_dims[n]]
         return tensor_image.flip(dims=flip_dims)
 
-@aug_parameters(min_width=.1, max_width=.5, min_height=.1, max_height=.5)
+
+@aug_distributions(rectangle_size=Uniform2D((0.0, 1.0, 0.0, 1.0)), rectangle_center=Uniform2D((0.0, 1.0)))
 class EraseRectangle(SpatialImageAugmentation):
-    def forward_sample(self, tensor_image):
-        result = tensor_image.copy()
-        _, _, image_width, image_height = tensor_image.size()
-        size_minima = torch.Tensor([self.min_width, self.min_height])
-        size_ranges = torch.Tensor([self.max_width - self.min_width, self.max_height - self.min_height])
-        patch_width, patch_height = (torch.rand(2) * size_ranges + size_minima).tolist()
-        left, top = (torch.rand(2)).tolist()
-        left = math.round(image_width - patch_width) * left
-        top = math.round(image_height - patch_height) * top
-        result[:, :, left:left+patch_width, top:top+patch_height] = 0
+    def forward_sample_img(self, tensor_image):
+        _, _, img_width, img_height = tensor_image.size()
+        result = tensor_image.clone()
+        rect_width, rect_height = self.rectangle_size.get_rect_sizes(image_total_size=(img_width, img_height))
+        rect_left, rect_top = self.rectangle_size.get_rect_locations(rect_sizes=(rect_width, rect_height),
+                                                                     image_total_size=(img_width, img_height))
+        result[:, rect_left:rect_left + rect_width, rect_left:rect_left + rect_width] = 0
         return result
 
-@aug_parameters(desired_width=224, desired_height=224)
+
+@aug_distributions(crop_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
+class CropToSize(SpatialImageAugmentation):
+    def forward_sample_img(self, tensor_image):
+        _, _, img_width, img_height = tensor_image.size()
+        result = tensor_image.clone()
+        rect_width, rect_height = self.rectangle_size.get_rect_sizes(image_total_size=(img_width, img_height))
+        rect_left, rect_top = self.rectangle_size.get_rect_locations(rect_sizes=(rect_width, rect_height),
+                                                                     image_total_size=(img_width, img_height))
+        result[:, rect_left:rect_left + rect_width, rect_left:rect_left + rect_width] = 0
+        return result
+
+
+#@aug_parameters(desired_width=224, desired_height=224)
+@aug_distributions(pad_center=Uniform2D((0.0, 1.0)), crop_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
 class CropPadAsNeeded(SpatialImageAugmentation):
-    def forward_sample(self, tensor_image):
+    def forward_sample_img(self, tensor_image):
+        _, img_width, img_height = tensor_image.size()
+        tensor_image = tensor_image.unsqueeze(dim=0)
         _, nb_channels, input_width, input_height = tensor_image.size()
         new_tensor_image = torch.zeros([1, nb_channels, self.desired_width, self.desired_height])
 
@@ -91,12 +98,13 @@ class CropPadAsNeeded(SpatialImageAugmentation):
         new_tensor_image[:, :, output_left:output_right, output_top:output_bottom] = \
             tensor_image[:, :, input_left:input_right, input_top:input_bottom]
 
-        return new_tensor_image
+        return new_tensor_image[0, :, :, :]
 
 
-@aug_parameters(desired_width=128, desired_height=128, preserve_aspect_ratio=True)
+@aug_parameters(desired_width=224, desired_height=224, preserve_aspect_ratio=True)
 class ScaleAndPadAsNeeded(SpatialImageAugmentation):
-    def forward_sample(self, tensor_image):
+    def forward_sample_img(self, tensor_image):
+        tensor_image = tensor_image.unsqueeze(dim =0)
         _, nb_channels, input_width, input_height = tensor_image.size()
         if self.preserve_aspect_ratio:
             new_tensor_image = torch.zeros(1, nb_channels, self.desired_width, self.desired_height)
@@ -123,4 +131,4 @@ class ScaleAndPadAsNeeded(SpatialImageAugmentation):
         else:
             new_tensor_image = F.interpolate(tensor_image, size=[self.desired_width, self.desired_width],
                                              mode='bilinear', align_corners=True)
-        return new_tensor_image
+        return new_tensor_image[0, :, :, :]
