@@ -55,7 +55,7 @@ class AugmentationDataset(torch.utils.data.Dataset):
         sample = self.dataset[item]
         sample = tuple([augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
         if self.append_input_map:
-            sample = sample + (self.augmentation_factory(torch.ones_like(sample[0])),)
+            sample = sample + (augmentation(torch.ones_like(sample[0])),)
         return sample
 
 

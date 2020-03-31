@@ -90,7 +90,7 @@ class Uniform2D(Distribution2D):
 
     def __repr__(self) -> str:
         if self.vert_distribution is self.horiz_distribution:
-            location_str = f"{self.__class__.__qualname__}(location=({self.horiz_min.item()}, {self.horiz_max.item()}))"
+            location_str = f"location=({self.horiz_min.item()}, {self.horiz_max.item()})"
         else:
             horiz_str = f"{self.horiz_min.item()}, {self.horiz_max.item()}"
             vert_str = f"{self.vert_min.item()}, {self.vert_max.item()}"
@@ -142,9 +142,8 @@ class Uniform2D(Distribution2D):
                     "vert_min": self.vert_min, "vert_max": self.vert_max}
 
 
-
 class Bernoulli(Distribution):
-    def __init__(self, prob=.5, do_rsample=False):
+    def __init__(self, prob: float = .5, do_rsample: object = False) -> object:
         super().__init__(do_rsample)
         self.prob = torch.autograd.Variable(torch.tensor([prob]))
         self.distribution = torch.distributions.Bernoulli(probs=self.prob)

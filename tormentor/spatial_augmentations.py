@@ -15,7 +15,6 @@ class Rotate(SpatialImageAugmentation):
         return kornia.geometry.rotate(tensor_image, rotate_degrees)
 
 
-
 @aug_distributions(scales=Uniform2D(location=(.5, 1.5)))
 class Scale(SpatialImageAugmentation):
     """Implementation of augmentation by scaling images.
@@ -46,10 +45,11 @@ class EraseRectangle(SpatialImageAugmentation):
         return result
 
 
-@aug_distributions(crop_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
+@aug_distributions(horiz_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
 class CropToSize(SpatialImageAugmentation):
     def forward_sample_img(self, tensor_image):
         _, _, img_width, img_height = tensor_image.size()
+
         result = tensor_image.clone()
         rect_width, rect_height = self.rectangle_size.get_rect_sizes(image_total_size=(img_width, img_height))
         rect_left, rect_top = self.rectangle_size.get_rect_locations(rect_sizes=(rect_width, rect_height),
@@ -101,34 +101,34 @@ class CropPadAsNeeded(SpatialImageAugmentation):
         return new_tensor_image[0, :, :, :]
 
 
-@aug_parameters(desired_width=224, desired_height=224, preserve_aspect_ratio=True)
-class ScaleAndPadAsNeeded(SpatialImageAugmentation):
-    def forward_sample_img(self, tensor_image):
-        tensor_image = tensor_image.unsqueeze(dim =0)
-        _, nb_channels, input_width, input_height = tensor_image.size()
-        if self.preserve_aspect_ratio:
-            new_tensor_image = torch.zeros(1, nb_channels, self.desired_width, self.desired_height)
-            if input_width/input_height > self.desired_width/self.desired_height: # scaling to desired width
-                scaled_heigth = int(round(self.desired_height * (input_height/ input_width)))
-                scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
-                                                                       size=[self.desired_width, scaled_heigth],
-                                                                       mode='bilinear', align_corners=True)
-                top = torch.randint(0, scaled_heigth - self.desired_height, (1,)).item()
-                bottom = self.desired_height - top
-                new_tensor_image[:,:,:,top:bottom] = scaled_tensor_image
-            else: #scaling to desired width
-                scaled_width = int(round(self.desired_width * (input_width/input_height)))
-                scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
-                                                                       size=[scaled_width, self.desired_height],
-                                                                       mode='bilinear', align_corners=True)
-                print(scaled_width, self.desired_width)
-                if scaled_width == self.desired_width:
-                    left = 0
-                else:
-                    left = torch.randint(0, scaled_width - self.desired_width, (1,)).item()
-                right = self.desired_width - left
-                new_tensor_image[:,:, left:right, :] = scaled_tensor_image
-        else:
-            new_tensor_image = F.interpolate(tensor_image, size=[self.desired_width, self.desired_width],
-                                             mode='bilinear', align_corners=True)
-        return new_tensor_image[0, :, :, :]
+#@aug_parameters(desired_width=224, desired_height=224, preserve_aspect_ratio=True)
+# class ScaleAndPadAsNeeded(SpatialImageAugmentation):
+#     def forward_sample_img(self, tensor_image):
+#         tensor_image = tensor_image.unsqueeze(dim =0)
+#         _, nb_channels, input_width, input_height = tensor_image.size()
+#         if self.preserve_aspect_ratio:
+#             new_tensor_image = torch.zeros(1, nb_channels, self.desired_width, self.desired_height)
+#             if input_width/input_height > self.desired_width/self.desired_height: # scaling to desired width
+#                 scaled_heigth = int(round(self.desired_height * (input_height/ input_width)))
+#                 scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
+#                                                                        size=[self.desired_width, scaled_heigth],
+#                                                                        mode='bilinear', align_corners=True)
+#                 top = torch.randint(0, scaled_heigth - self.desired_height, (1,)).item()
+#                 bottom = self.desired_height - top
+#                 new_tensor_image[:,:,:,top:bottom] = scaled_tensor_image
+#             else: #scaling to desired width
+#                 scaled_width = int(round(self.desired_width * (input_width/input_height)))
+#                 scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
+#                                                                        size=[scaled_width, self.desired_height],
+#                                                                        mode='bilinear', align_corners=True)
+#                 print(scaled_width, self.desired_width)
+#                 if scaled_width == self.desired_width:
+#                     left = 0
+#                 else:
+#                     left = torch.randint(0, scaled_width - self.desired_width, (1,)).item()
+#                 right = self.desired_width - left
+#                 new_tensor_image[:,:, left:right, :] = scaled_tensor_image
+#         else:
+#             new_tensor_image = F.interpolate(tensor_image, size=[self.desired_width, self.desired_width],
+#                                              mode='bilinear', align_corners=True)
+#         return new_tensor_image[0, :, :, :]

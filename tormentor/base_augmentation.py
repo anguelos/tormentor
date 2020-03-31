@@ -14,8 +14,8 @@ class AugmentationFactory(torch.nn.Module):
         super().__init__()
         assert set(kwargs.keys()) <= set(augmentation_cls.distributions.keys())
         self.augmentation_distributions = {k: v.copy() for k, v in augmentation_cls.distributions.items()}
-        overiden_distributions = {k: v for k, v in kwargs.items() if k in augmentation_cls.distributions.keys()}
-        self.augmentation_distributions.update(overiden_distributions)
+        overridden_distributions = {k: v for k, v in kwargs.items() if k in augmentation_cls.distributions.keys()}
+        self.augmentation_distributions.update(overridden_distributions)
         self.augmentation_cls = augmentation_cls
         for d_name, distribution in self.augmentation_distributions.items():
             for p_name, p_value in distribution.parameters().items():
@@ -30,6 +30,7 @@ class AugmentationFactory(torch.nn.Module):
 
     def new(self):
         return self.augmentation_cls(**self.augmentation_distributions)
+
 
 
 class DeterministicImageAugmentation(object):
@@ -50,6 +51,7 @@ class DeterministicImageAugmentation(object):
     # highly improbable. Although no guaranty of uniqueness of instance seed is made.
     # in case of a multiprocess parallelism, this minimizes chances of collision
     _global_seed = torch.LongTensor(1).random_(1000000000, 2000000000).item()
+    distributions = {"occurence": Bernoulli(prob=.3)}
 
     @staticmethod
     def reset_all_seeds(global_seed=None):
@@ -74,9 +76,23 @@ class DeterministicImageAugmentation(object):
         with torch.random.fork_rng(devices=(device,)):
             torch.manual_seed(self.seed)
             if len(tensor_image.size()) == 3:
-                return self.forward_sample_img(tensor_image)
+                if self.occurence():
+                    return self.forward_sample_img(tensor_image)
+                else:
+                    return tensor_image
             elif len(tensor_image.size()) == 4:
-                return self.forward_batch_img(tensor_image)
+                # faster but not differentiable
+                #apply_on = self.occurence(tensor_image.size(0)).byte()
+                #applied = self.forward_batch_img(tensor_image[apply_on, :, :, :])
+                #results = tensor_image.clone()
+                #results[apply_on, :, :, :] = applied
+                #return results
+
+                #slower but differentiable
+                applied = self.forward_batch_img(tensor_image)
+                mask = self.occurence(tensor_image.size(0)).unsqueeze(dim=1).unsqueeze(dim=1).unsqueeze(dim=1)
+                return applied * mask + tensor_image * (1 - mask)
+
             else:
                 raise ValueError("Augmented tensors must be samples (3D tensors) or batches (4D tensors)")
 
@@ -167,16 +183,20 @@ def aug_parameters(**kwargs):
     return register_default_random_parameters
 
 
-def aug_distributions(**kwargs):
+def aug_distributions(occurence = Bernoulli(.5), **kwargs):
     """Decorator that assigns random parameter ranges to augmentation and creates the augmentation's constructor.
 
     """
-    assert all([isinstance(v, Distribution) for v in kwargs.values()])
+    # assert all([isinstance(v, Distribution) for v in kwargs.values()])
+    # TODO (anguelos) howto handle non distribution factory parameters?
 
     default_params = kwargs
+    default_params.update({"occurence": occurence})
 
     def register_distributions(cls):
-        setattr(cls, "distributions", default_params.copy())
+        new_distributions = getattr(cls, "distributions").copy()
+        new_distributions.update(default_params.copy())
+        setattr(cls, "distributions", new_distributions)
         # Creating dynamically a constructor
         rnd_param = "\n\t".join((f"self.{k}={k}" for k in default_params.keys()))
         default_params["id"] = None
@@ -201,11 +221,3 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
     @property
     def preserves_geometry(self):
         return False
-
-#class SamplingFieldImageAugmentation(SpatialImageAugmentation):
-#    def preserves_geometry(self):
-#        return False
-
-#class MatrixImageAugmentation(SpatialImageAugmentation):
-#    def preserves_geometry(self):
-#        return False
