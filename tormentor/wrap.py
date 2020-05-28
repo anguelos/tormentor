@@ -23,11 +23,10 @@ class WrapAugmentation(SpatialImageAugmentation):
         pixel_scales = pixel_scales.view(-1, 1, 1)
         field_x, field_y = sampling_field
         sampling_field = field_x + plasma_x[:, 0, :, :] * pixel_scales, field_y + plasma_y[:, 0, :, :] * pixel_scales
-        print(sampling_field[0].size(), sampling_field[1].size())
         return sampling_field
 
 
-class Shred(SpatialImageAugmentation):
+class ShredAugmentation(SpatialImageAugmentation):
     roughness = Uniform(value_range=(.4, .8))
     inside = Bernoulli(prob=.5)
     erase_percentile = Uniform(value_range=(.0, .5))
@@ -51,5 +50,5 @@ class Shred(SpatialImageAugmentation):
         for n in range(plasma_pixels.size(0)):
             thresholds.append(torch.kthvalue(plasma_pixels[n], int(plasma_pixels.size(1)*erase_percentile))[0])
         thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1)
-        erase = (plasma < thresholds) * Shred.outside_field
+        erase = (plasma < thresholds) * ShredAugmentation.outside_field
         return sampling_field[0] + erase, sampling_field[1] + erase
