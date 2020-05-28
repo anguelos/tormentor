@@ -20,4 +20,4 @@ Image data augmentation for pytorch
 In order to minimize the code needed to define an augmentation.
 The factory defines the random distributions from wich augmentation sample.
 The inherited constructor handles random seeds.
-The method forward samples from the random distributions parameters and employs them.
+The method forward_sample_img samples from the random distributions aug_parameters and employs them.

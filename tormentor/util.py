@@ -1,6 +1,16 @@
 import torch
 
 
+def debug_pattern(num_rows:int, num_cols:int,square_size:int)->torch.FloatTensor:
+    res_img = torch.zeros([num_cols*square_size,num_rows*square_size])
+    square = (torch.arange(square_size).view(1,square_size) * torch.arange(square_size).view(square_size,1))
+    square = square / float(square_size * square_size)
+    for y in range(0,num_rows):
+        for x in range(y%2, num_cols,2):
+            res_img[x*square_size:(x+1)*square_size, y*square_size:(y+1)*square_size] = square
+    return res_img.unsqueeze(dim=0).unsqueeze(dim=0)
+
+
 def PCA(X, k, center=True, scale=False):
     n, p = X.size()
     ones = torch.ones(n).view([n, 1])

@@ -51,7 +51,7 @@ class AugmentationDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, item):
-        augmentation = self.augmentation_factory.new()
+        augmentation = self.augmentation_factory.create_persistent()
         sample = self.dataset[item]
         sample = tuple([augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
         if self.append_input_map:

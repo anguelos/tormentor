@@ -10,13 +10,17 @@ General design principles:
     - The first dimension of the 4D tensor is always 1
 
 """
-from .random import Uniform, Uniform2D, Bernoulli, Distribution, Distribution2D, Categorical
+
+from .random import Uniform, Bernoulli, Distribution, Categorical
 from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation
 from .spatial_augmentations import *
 from .channel_augmentations import *
 from .augmented_dataset import ImageAugmentationPipelineDataset
 from .wrap import WrapAugmentation
 from .augmented_dataset import AugmentationDataset, ImageAugmentationPipelineDataset
+from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
+from .util import debug_pattern
+
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
 leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(ChannelImageAugmentation.__subclasses__())
@@ -29,18 +33,17 @@ for aug in leaf_augmentations:
     aug_default_params = ", ".join((f"{k}={repr(v)}" for k, v in aug.distributions.items()))
     aug_params = ", ".join(f"{name}={name}" for name in aug.distributions.keys())
     factory_alias_def = f"def Random{aug_name}({aug_default_params}):\n\treturn {aug_name}.factory({aug_params})"
-    print(factory_alias_def)
     exec(factory_alias_def)
     all_augmentation_names.append(aug_name)
     all_factory_names.append(f"def Random{aug_name}")
 
 
 __all__ = [
+    "debug_pattern",
+    "Constant",
     "Uniform",
-    "Uniform2D",
     "Bernoulli",
     "Distribution",
-    "Distribution2D",
     "Categorical",
     "Scale",
     "Rotate",
@@ -51,5 +54,9 @@ __all__ = [
     "WrapAugmentation",
     "AugmentationDataset",
     "ImageAugmentationPipelineDataset",
-    "reset_all_seeds"
+    "reset_all_seeds",
+    "ConstantBackground",
+    "UniformNoiseBackground",
+    "NormalNoiseBackground",
+    "PlasmaBackground"
 ] + all_augmentation_names + all_factory_names

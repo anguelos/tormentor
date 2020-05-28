@@ -1,61 +1,48 @@
 import torch
-from diamond_square import diamond_square
+from diamond_square import functional_diamond_square
+from .random import Uniform, Bernoulli, Categorical, Constant, Normal
+from .base_augmentation import DeterministicImageAugmentation
 
 
-class BackgroundGenerator(object):
-    def create(self, size, device, dtype):
-        raise NotImplementedError()
-
-    def like(self, tensor):
-        return self.create(tensor.size(), device=tensor.device, dtype=tensor.dtype)
-
+class AbstractBackground(DeterministicImageAugmentation):
     def blend_by_mask(self, input_tensor, mask_tensor):
-        mask_tensor = mask_tensor.float()
         res = input_tensor * mask_tensor + (1 - mask_tensor) * self.like(input_tensor)
         return res
 
 
-class ConstantBackground(BackgroundGenerator):
-    def __init__(self, value=0):
-        self.value = value
+class ConstantBackground(AbstractBackground):
+    value = Constant(0)
 
-    def create(self, size, device, dtype):
-        result = torch.zeros(size, device=device, dtype=dtype) + self.value
-        return result
+    def forward_batch_img(self, tensor_image):
+        return torch.zeros_like(tensor_image) + type(self).value()
 
 
-class UniformNoiseBackground(BackgroundGenerator):
-    def __init__(self, min_value=0.0, max_value=1.0):
-        self.min_value = min_value
-        self.value_range = max_value - min_value
+class UniformNoiseBackground(AbstractBackground):
+    pixel_values = Uniform(value_range=(0.0, 1.0))
 
-    def create(self, size, device, dtype):
-        return torch.rand(size, device=device, dtype=dtype) * self.value_range + self.min_value
+    def forward_batch_img(self, tensor_image):
+        return type(self).pixel_values(tensor_image.size())
 
 
-class GaussianNoiseBackground(BackgroundGenerator):
-    def __init__(self, mean=0.0, variance=1.0):
-        self.mean = mean
-        self.variance = variance
+class NormalNoiseBackground(AbstractBackground):
+    pixel_values = Normal(mean=0.0, deviation=1.0)
 
-    def create(self, size, device, dtype):
-        return torch.rand(size, device=device, dtype=dtype) * self.variance + self.mean
+    def forward_batch_img(self, tensor_image):
+        return type(self).pixel_values(tensor_image.size())
 
 
-class PlasmaBackground(BackgroundGenerator):
-    def __init__(self, mean_range, std_range, roughness_range):
-        self.mean_range = mean_range
-        self.std_range = std_range
-        self.roughness_range = roughness_range
+class PlasmaBackground(AbstractBackground):
+    roughness = Uniform(value_range=(0.2, 0.6))
+    pixel_means = Uniform(value_range=(0.0, 1.0))
+    pixel_ranges = Uniform(value_range=(0.0, 1.0))
 
-    def create(self, size, device, dtype=None):
-        roughness = torch.rand(1).item() * (self.roughness_range[1]-self.roughness_range[0]) + self.roughness_range[0]
-        mean = torch.rand(1).item() * (self.mean_range[1] - self.mean_range[0]) + self.mean_range[0]
-        std = torch.rand(1).item() * (self.std_range[1] - self.std_range[0]) + self.std_range[0]
-
-        input_batch_size, input_channel_size, input_width, input_height = size
-        ds = diamond_square(width_height=(input_width, input_height), roughness=roughness,output_deviation_mean=(std, mean), replicates=input_batch_size*input_channel_size, device=device)
-        result = ds.view(size)
-        if dtype is not None:
-            result = result.type(dtype=dtype)
-        return result
+    def forward_batch_img(self, tensor_image):
+        batch_size = tensor_image.size(0)
+        roughness = type(self).roughness(batch_size)
+        pixel_means = type(self).pixel_means(batch_size).view(-1, 1, 1, 1)
+        pixel_ranges = type(self).pixel_ranges(batch_size).view(-1, 1, 1, 1)
+        plasma = functional_diamond_square(tensor_image.size(), roughness=roughness, device=self.device)
+        plasma_reshaped = plasma.reshape([batch_size, -1])
+        plasma_min = plasma_reshaped.min(dim=1)[0].view(-1, 1, 1, 1)
+        plasma_max = plasma_reshaped.max(dim=1)[0].view(-1, 1, 1, 1)
+        return (pixel_ranges * (plasma - plasma_min) / (plasma_max - plasma_min)) +  pixel_means - pixel_ranges / 2

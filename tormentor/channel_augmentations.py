@@ -1,41 +1,42 @@
-import math
+from .random import *
+from .base_augmentation import ChannelImageAugmentation, SpatialAugmentationState
 import kornia as K
-from.random import *
-from .base_augmentation import ChannelImageAugmentation, aug_distributions
 
 
-@aug_distributions(brightness=Uniform((-1.0, 1.0)))
 class Brighten(ChannelImageAugmentation):
-    def forward_batch_img(self, batch_tensor):
-        return K.color.adjust_brightness(batch_tensor, self.brightness(batch_tensor.size(0)))
+    brightness = Uniform((-1.0, 1.0))
+
+    def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
+        brightness = type(self).brightness(batch.size(0)).view(-1)
+        return brightness,
+
+    @staticmethod
+    def functional_image(batch:torch.FloatTensor, brightness: torch.FloatTensor)->torch.FloatTensor:
+        brightness = brightness.view(-1, 1, 1, 1)
+        return torch.clamp(brightness, 0.0, 1.0)
 
 
-@aug_distributions(saturation=Uniform((0.0, 1.0)))
 class Saturate(ChannelImageAugmentation):
-    def forward_batch_img(self, batch_tensor):
-        return K.color.adjust_saturation(batch_tensor, self.saturation(batch_tensor.size(0)))
+    saturation = Uniform((0.0, 1.0))
+
+    def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
+        saturation = type(self).saturation(batch.size(0)).view(-1)
+        return saturation,
+
+    @staticmethod
+    def functional_image(batch:torch.FloatTensor, saturation: torch.FloatTensor)->torch.FloatTensor:
+        saturation = saturation.view(-1, 1, 1, 1)
+        return K.color.adjust_saturation(batch, saturation)
 
 
-@aug_distributions(contrast=Uniform((0.0, 1.0)))
-class SetContrast(ChannelImageAugmentation):
-    def forward_batch_img(self, batch_tensor):
-        return K.color.adjust_contrast(batch_tensor, self.contrast(batch_tensor.size(0)))
+class Contrast(ChannelImageAugmentation):
+    contrast = Uniform((0.0, 1.0))
 
+    def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
+        contrast = type(self).contrast(batch.size(0)).view(-1)
+        return contrast,
 
-@aug_distributions(gamma=Uniform((0.0, 1.0)), flip=Bernoulli(.5))
-class SetGamma(ChannelImageAugmentation):
-    def forward_batch_img(self, batch_tensor):
-        flip = self.flip(batch_tensor.size(0)).float()
-        gamma = self.saturation(batch_tensor.size(0))
-        gamma = (1 / gamma) * flip + gamma * (1 - flip)
-        return K.color.adjust_gamma(batch_tensor, gamma)
-
-
-@aug_distributions(gamma=Uniform((-math.pi, math.pi)), flip=Bernoulli(.5))
-class SetGamma(ChannelImageAugmentation):
-    def forward_batch_img(self, batch_tensor):
-        flip = self.flip(batch_tensor.size(0)).float()
-        gamma = self.saturation(batch_tensor.size(0))
-        gamma = (1 / gamma) * flip + gamma * (1 - flip)
-        return K.color.adjust_gamma(batch_tensor, gamma)
-
+    @staticmethod
+    def functional_image(batch:torch.FloatTensor, contrast: torch.FloatTensor)->torch.FloatTensor:
+        contrast = contrast.view(-1, 1, 1, 1)
+        return K.color.adjust_saturation(batch, contrast)

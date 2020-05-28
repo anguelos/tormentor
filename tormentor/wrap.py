@@ -1,23 +1,52 @@
-import kornia
+from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState
+from .random import Uniform, Bernoulli
+from diamond_square import functional_diamond_square
+import torch
 
-from .random import *
-from diamond_square import diamond_square
-from .base_augmentation import SpatialImageAugmentation, aug_distributions
 
-
-@aug_distributions(roughness=Uniform((.3, .7)))
 class WrapAugmentation(SpatialImageAugmentation):
-    def forward_sample_img(self, input_image):
-        input_image = input_image.unsqueeze(dim =0)
-        _, channels, width, height = input_image.size()
-        roughness = torch.rand(1) * (self.max_roughness - self.min_roughness) + self.min_roughness
-        pixel_scale = torch.rand(1) * (self.max_pixel_scale - self.min_pixel_scale) + self.min_pixel_scale
-        ds = diamond_square(width_height=(width, height), roughness=roughness, replicates=2, output_range=[-.5, .5])
-        grid = kornia.utils.create_meshgrid(width, height, False)
-        delta_y = ds[:, :, :, 1:] - ds[:, :, :, :-1]
-        delta_x = ds[:, :, 1:, :] - ds[:, :, :-1, :]
-        delta = torch.cat([delta_x.view(-1), delta_y.view(-1)], dim=0).abs()
-        ds = pixel_scale * ds / delta.max() + pixel_scale/2
-        result_image = kornia.geometry.remap(input_image, grid[:, :, :, 0] + ds[0, :, :, :],
-                                             grid[:, :, :, 1] + ds[1, :, :, :])
-        return result_image[0, :, :, :]
+    pixel_scale = Uniform(value_range=(1.0, 10.0))
+    roughness = Uniform(value_range=(.4, .8))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
+        batch_sz, width, height = sampling_tensors[0].size()
+        pixel_scales = type(self).pixel_scale(batch_sz)
+        roughness = type(self).roughness(batch_sz)
+        plasma_sz = (batch_sz, 1, width, height)
+        plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
+        plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
+        return plasma_x, plasma_y, pixel_scales
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor)->SamplingField:
+        pixel_scales = pixel_scales.view(-1, 1, 1, 1)
+        field_x, field_y = sampling_field
+        return field_x + plasma_x * pixel_scales, field_y + plasma_y * pixel_scales
+
+
+class Shred(SpatialImageAugmentation):
+    roughness = Uniform(value_range=(.4, .8))
+    inside = Bernoulli(prob=.5)
+    erase_percentile = Uniform(value_range=(.0, .5))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
+        batch_sz, width, height = sampling_tensors[0].size()
+        roughness = type(self).roughness(batch_sz)
+        plasma_sz = (batch_sz, 1, width, height)
+        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
+        inside = type(self).pixel_scale(batch_sz).float()
+        erase_percentile = self.erase_percentile(batch_sz)
+        return plasma, inside, erase_percentile
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, plasma:torch.FloatTensor, inside:torch.FloatTensor, erase_percentile:torch.FloatTensor)->SamplingField:
+        inside = inside.view(-1, 1, 1, 1)
+        erase_percentile = erase_percentile.view(-1, 1, 1, 1)
+        plasma = inside * plasma + (1-inside) * (1-plasma)
+        plasma_pixels = plasma.view(plasma.size(0),-1)
+        thresholds = []
+        for n in range(plasma_pixels.size(0)):
+            thresholds.append(torch.kthvalue(plasma_pixels[n], int(plasma_pixels.size(1)*erase_percentile))[0])
+        thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1)
+        erase = (plasma < thresholds) * Shred.outside_field
+        return sampling_field[0] + erase, sampling_field[1] + erase

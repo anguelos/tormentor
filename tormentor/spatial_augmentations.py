@@ -1,134 +1,143 @@
-from .base_augmentation import SpatialImageAugmentation, aug_parameters, aug_distributions
-from .random import Uniform, Uniform2D, Bernoulli, Categorical
-
+from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState
+from .random import Uniform, Bernoulli, Categorical
 import torch
-import torch.nn.functional as F
-import kornia
-import math
 
 
-# Fully diferentiable augmentation
-@aug_distributions(rotate_radians=Uniform((-3.1415, 3.1415)))
 class Rotate(SpatialImageAugmentation):
-    def forward_batch_img(self, tensor_image):
-        rotate_degrees = self.rotate_radians(tensor_image.size(0)).view(-1) * 180/math.pi
-        return kornia.geometry.rotate(tensor_image, rotate_degrees)
+    rotate_radians = Uniform((-3.1415, 3.1415))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
+        batch_sz = sampling_tensors[0].size(0)
+        radians = type(self).rotate_radians(batch_sz).view(-1)
+        return (radians,)
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, radians:torch.FloatTensor)->SamplingField:
+        field_x, field_y = sampling_field
+        radians = radians.unsqueeze(dim=1).unsqueeze(dim=1)
+        cos_th = torch.cos(radians)
+        sin_th = torch.sin(radians)
+        neg_sin_th = torch.sin(-radians)
+        return field_x * cos_th + neg_sin_th * field_y, field_x*sin_th + cos_th*field_y
 
 
-@aug_distributions(scales=Uniform2D(location=(.5, 1.5)))
-class Scale(SpatialImageAugmentation):
-    """Implementation of augmentation by scaling images.
+class Zoom(SpatialImageAugmentation):
+    """Implementation of augmentation by scaling images preserving aspect ratio.
     """
-    def forward_sample_img(self, tensor_image):
-        scale_x, scale_y = self.scales()
-        result = F.interpolate(tensor_image.unsqueeze(dim=0), scale_factor=(scale_x, scale_y), mode='bilinear', align_corners=True)
-        return result[0, :, :, :]
+    scales = Uniform(value_range=(.5, 1.5))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
+        scales = type(self).scales(sampling_tensors[0].size(0))
+        return (scales,)
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, scales:torch.FloatTensor):
+        scales = scales.unsqueeze(dim=1).unsqueeze(dim=2)
+        return scales * sampling_field[0], scales * sampling_field[1]
 
 
-@aug_distributions(horizontal=Bernoulli(.5), vertical=Bernoulli(.5))
+class Scale(SpatialImageAugmentation):
+    """Implementation of augmentation by scaling images preserving aspect ratio.
+    """
+    x_scales = Uniform(value_range=(.5, 1.5))
+    y_scales = Uniform(value_range=(.5, 1.5))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
+        batch_sz = sampling_tensors[0].size(0)
+        x_scales = type(self).x_scales(batch_sz)
+        y_scales = type(self).y_scales(batch_sz)
+        return (x_scales, y_scales)
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
+        x_scales = x_scales.unsqueeze(dim=1).unsqueeze(dim=2)
+        y_scales = y_scales.unsqueeze(dim=1).unsqueeze(dim=2)
+        return x_scales * sampling_field[0], y_scales * sampling_field[1]
+
+
+class Translate(SpatialImageAugmentation):
+    """Implementation of augmentation by scaling images preserving aspect ratio.
+    """
+    x_offset = Uniform(value_range=(-1., 1.))
+    y_offset = Uniform(value_range=(-1., 1.))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
+        batch_sz = sampling_tensors[0].size(0)
+        x_offset = type(self).x_offset(batch_sz)
+        y_offset = type(self).y_offset(batch_sz)
+        return (x_offset, y_offset)
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor):
+        x_offset = x_offset.unsqueeze(dim=1).unsqueeze(dim=2)
+        y_offset = y_offset.unsqueeze(dim=1).unsqueeze(dim=2)
+        return x_offset + sampling_field[0], y_offset + sampling_field[1]
+
+
+class ScaleTranslate(SpatialImageAugmentation):
+    """Implementation of augmentation by scaling images preserving aspect ratio.
+    """
+    x_offset = Uniform(value_range=(-1., 1.))
+    y_offset = Uniform(value_range=(-1., 1.))
+    x_scales = Uniform(value_range=(.5, 1.5))
+    y_scales = Uniform(value_range=(.5, 1.5))
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
+        batch_sz = sampling_tensors[0].size(0)
+        x_offset = type(self).x_offset(batch_sz)
+        y_offset = type(self).y_offset(batch_sz)
+        x_scales = type(self).x_scales(batch_sz)
+        y_scales = type(self).y_scales(batch_sz)
+        return (x_offset, y_offset, x_scales, y_scales)
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
+        x_offset = x_offset.unsqueeze(dim=1).unsqueeze(dim=2)
+        y_offset = y_offset.unsqueeze(dim=1).unsqueeze(dim=2)
+        x_scales = x_scales.unsqueeze(dim=1).unsqueeze(dim=2)
+        y_scales = y_scales.unsqueeze(dim=1).unsqueeze(dim=2)
+        return x_offset + x_scales * sampling_field[0], y_offset + y_scales * sampling_field[1]
+
+
 class Flip(SpatialImageAugmentation):
-    def forward_sample_img(self, tensor_image):
-        flip_dims = [False, self.horizontal(), self.vertical()]
-        flip_dims = [n for n in range(len(flip_dims)) if flip_dims[n]]
-        return tensor_image.flip(dims=flip_dims)
+    horizontal = Bernoulli(.5)
+    vertical = Bernoulli(.5)
+
+    def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
+        batch_sz = sampling_tensors[0].size(0)
+        horizontal, vertical = type(self).horizontal(batch_sz), type(self).vertical(batch_sz)
+        return horizontal, vertical
+
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, horizontal:torch.FloatTensor, vertical:torch.FloatTensor):
+        horizontal = ((1-horizontal) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
+        vertical = ((1 - vertical) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
+        return horizontal * sampling_field[0], vertical * sampling_field[1]
 
 
-@aug_distributions(rectangle_size=Uniform2D((0.0, 1.0, 0.0, 1.0)), rectangle_center=Uniform2D((0.0, 1.0)))
 class EraseRectangle(SpatialImageAugmentation):
-    def forward_sample_img(self, tensor_image):
-        _, _, img_width, img_height = tensor_image.size()
-        result = tensor_image.clone()
-        rect_width, rect_height = self.rectangle_size.get_rect_sizes(image_total_size=(img_width, img_height))
-        rect_left, rect_top = self.rectangle_size.get_rect_locations(rect_sizes=(rect_width, rect_height),
-                                                                     image_total_size=(img_width, img_height))
-        result[:, rect_left:rect_left + rect_width, rect_left:rect_left + rect_width] = 0
-        return result
+    center_x = Uniform((-1.0, 1.0))
+    center_y = Uniform((-1.0, 1.0))
+    width = Uniform((.2, .5))
+    height = Uniform((.2, .5))
 
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
+        batch_size = sampling_tensors[0].size(0)
+        center_x = type(self).center_x(batch_size)
+        center_y = type(self).center_y(batch_size)
+        width = type(self).width(batch_size)
+        height = type(self).height(batch_size)
+        return center_x, center_y, width, height
 
-@aug_distributions(horiz_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
-class CropToSize(SpatialImageAugmentation):
-    def forward_sample_img(self, tensor_image):
-        _, _, img_width, img_height = tensor_image.size()
-
-        result = tensor_image.clone()
-        rect_width, rect_height = self.rectangle_size.get_rect_sizes(image_total_size=(img_width, img_height))
-        rect_left, rect_top = self.rectangle_size.get_rect_locations(rect_sizes=(rect_width, rect_height),
-                                                                     image_total_size=(img_width, img_height))
-        result[:, rect_left:rect_left + rect_width, rect_left:rect_left + rect_width] = 0
-        return result
-
-
-#@aug_parameters(desired_width=224, desired_height=224)
-@aug_distributions(pad_center=Uniform2D((0.0, 1.0)), crop_center=Uniform2D((0.0, 1.0)), image_size=(224, 224))
-class CropPadAsNeeded(SpatialImageAugmentation):
-    def forward_sample_img(self, tensor_image):
-        _, img_width, img_height = tensor_image.size()
-        tensor_image = tensor_image.unsqueeze(dim=0)
-        _, nb_channels, input_width, input_height = tensor_image.size()
-        new_tensor_image = torch.zeros([1, nb_channels, self.desired_width, self.desired_height])
-
-        if input_width > self.desired_width:
-            input_left = torch.randint(0, input_width - self.desired_width, (1,)).item()
-            input_right = input_left + self.desired_width
-            output_left = 0
-            output_right = self.desired_width
-        elif input_width < self.desired_width:
-            input_left = 0
-            input_right = input_width
-            output_left = torch.randint(0, self.desired_width - input_width, (1,)).item()
-            output_right = output_left + input_width
-        else: # They are equal
-            input_left = output_left = 0
-            input_right = output_right = self.desired_width
-
-        if input_height > self.desired_height:
-            input_top = torch.randint(0, input_height - self.desired_height, (1,)).item()
-            input_bottom = input_top + self.desired_height
-            output_top = 0
-            output_bottom = self.desired_height
-        elif input_height < self.desired_height:
-            input_top = 0
-            input_bottom = input_height
-            output_top = torch.randint(0, self.desired_height - input_height, (1,)).item()
-            output_bottom = output_top + input_height
-        else:  # They are equal
-            input_top = output_top = 0
-            input_bottom = output_bottom = self.desired_width
-
-        new_tensor_image[:, :, output_left:output_right, output_top:output_bottom] = \
-            tensor_image[:, :, input_left:input_right, input_top:input_bottom]
-
-        return new_tensor_image[0, :, :, :]
-
-
-#@aug_parameters(desired_width=224, desired_height=224, preserve_aspect_ratio=True)
-# class ScaleAndPadAsNeeded(SpatialImageAugmentation):
-#     def forward_sample_img(self, tensor_image):
-#         tensor_image = tensor_image.unsqueeze(dim =0)
-#         _, nb_channels, input_width, input_height = tensor_image.size()
-#         if self.preserve_aspect_ratio:
-#             new_tensor_image = torch.zeros(1, nb_channels, self.desired_width, self.desired_height)
-#             if input_width/input_height > self.desired_width/self.desired_height: # scaling to desired width
-#                 scaled_heigth = int(round(self.desired_height * (input_height/ input_width)))
-#                 scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
-#                                                                        size=[self.desired_width, scaled_heigth],
-#                                                                        mode='bilinear', align_corners=True)
-#                 top = torch.randint(0, scaled_heigth - self.desired_height, (1,)).item()
-#                 bottom = self.desired_height - top
-#                 new_tensor_image[:,:,:,top:bottom] = scaled_tensor_image
-#             else: #scaling to desired width
-#                 scaled_width = int(round(self.desired_width * (input_width/input_height)))
-#                 scaled_tensor_image = new_tensor_image = F.interpolate(tensor_image,
-#                                                                        size=[scaled_width, self.desired_height],
-#                                                                        mode='bilinear', align_corners=True)
-#                 print(scaled_width, self.desired_width)
-#                 if scaled_width == self.desired_width:
-#                     left = 0
-#                 else:
-#                     left = torch.randint(0, scaled_width - self.desired_width, (1,)).item()
-#                 right = self.desired_width - left
-#                 new_tensor_image[:,:, left:right, :] = scaled_tensor_image
-#         else:
-#             new_tensor_image = F.interpolate(tensor_image, size=[self.desired_width, self.desired_width],
-#                                              mode='bilinear', align_corners=True)
-#         return new_tensor_image[0, :, :, :]
+    @staticmethod
+    def functional_points(sampling_field:SamplingField, center_x:torch.FloatTensor, center_y:torch.FloatTensor, width:torch.FloatTensor, height:torch.FloatTensor)->SamplingField:
+        center_x = center_x.view(-1, 1, 1)
+        center_y = center_y.view(-1, 1, 1)
+        width = width.view(-1, 1, 1)
+        height = height.view(-1, 1, 1)
+        x_sampling, y_sampling = sampling_field
+        x_erase = ((x_sampling - center_x).abs() < width).float() * EraseRectangle.outside_field
+        y_erase = ((y_sampling - center_y).abs() < height).float() * EraseRectangle.outside_field
+        erase = x_erase * y_erase
+        sampling_field = x_sampling + erase, y_sampling + erase
+        return sampling_field
