@@ -19,9 +19,12 @@ class WrapAugmentation(SpatialImageAugmentation):
 
     @staticmethod
     def functional_points(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor)->SamplingField:
-        pixel_scales = pixel_scales.view(-1, 1, 1, 1)
+        print(sampling_field[0].size(),sampling_field[1].size())
+        pixel_scales = pixel_scales.view(-1, 1, 1)
         field_x, field_y = sampling_field
-        return field_x + plasma_x * pixel_scales, field_y + plasma_y * pixel_scales
+        sampling_field = field_x + plasma_x[:, 0, :, :] * pixel_scales, field_y + plasma_y[:, 0, :, :] * pixel_scales
+        print(sampling_field[0].size(), sampling_field[1].size())
+        return sampling_field
 
 
 class Shred(SpatialImageAugmentation):
