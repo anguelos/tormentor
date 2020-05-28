@@ -16,7 +16,7 @@ from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentatio
 from .spatial_augmentations import *
 from .channel_augmentations import *
 from .augmented_dataset import ImageAugmentationPipelineDataset
-from .wrap import WrapAugmentation
+from .wrap import WrapAugmentation, ShredAugmentation
 from .augmented_dataset import AugmentationDataset, ImageAugmentationPipelineDataset
 from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern
@@ -59,4 +59,5 @@ __all__ = [
     "UniformNoiseBackground",
     "NormalNoiseBackground",
     "PlasmaBackground"
+    "ShredAugmentation"
 ] + all_augmentation_names + all_factory_names
