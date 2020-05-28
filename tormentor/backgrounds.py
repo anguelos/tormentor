@@ -41,7 +41,7 @@ class PlasmaBackground(AbstractBackground):
         roughness = type(self).roughness(batch_size)
         pixel_means = type(self).pixel_means(batch_size).view(-1, 1, 1, 1)
         pixel_ranges = type(self).pixel_ranges(batch_size).view(-1, 1, 1, 1)
-        plasma = functional_diamond_square(tensor_image.size(), roughness=roughness, device=self.device)
+        plasma = functional_diamond_square(tensor_image.size(), roughness=roughness, device=tensor_image.device)
         plasma_reshaped = plasma.reshape([batch_size, -1])
         plasma_min = plasma_reshaped.min(dim=1)[0].view(-1, 1, 1, 1)
         plasma_max = plasma_reshaped.max(dim=1)[0].view(-1, 1, 1, 1)
