@@ -10,11 +10,11 @@ class WrapAugmentation(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
         batch_sz, width, height = sampling_tensors[0].size()
-        pixel_scales = type(self).pixel_scale(batch_sz)
-        roughness = type(self).roughness(batch_sz)
+        pixel_scales = type(self).pixel_scale(batch_sz, device=sampling_tensors[0].device)
+        roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
         plasma_sz = (batch_sz, 1, width, height)
-        plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
-        plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
+        plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
+        plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
         return plasma_x, plasma_y, pixel_scales
 
     @staticmethod
@@ -31,10 +31,10 @@ class Shred(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
         batch_sz, width, height = sampling_tensors[0].size()
-        roughness = type(self).roughness(batch_sz)
+        roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
         plasma_sz = (batch_sz, 1, width, height)
-        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=self.device)
-        inside = type(self).pixel_scale(batch_sz).float()
+        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
+        inside = type(self).pixel_scale(batch_sz, device=sampling_tensors[0].device).float()
         erase_percentile = self.erase_percentile(batch_sz)
         return plasma, inside, erase_percentile
 

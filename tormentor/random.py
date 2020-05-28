@@ -13,7 +13,7 @@ class Distribution(torch.nn.Module):
         super().__init__()
         self.do_rsample = do_rsample
 
-    def forward(self, size: TensorSize = 1):
+    def forward(self, size: TensorSize = 1, device="cpu"):
         raise NotImplementedError()
 
     def copy(self, do_rsample=None):
@@ -36,13 +36,13 @@ class Uniform(Distribution):
         param_str = f" do_rsample={self.do_rsample}"
         return f"{self.__class__.__qualname__}(value_range={range_str}, {param_str})"
 
-    def forward(self, size: TensorSize = 1) -> torch.Tensor:
+    def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         if self.do_rsample:
             raise NotImplemented
         else:
             if not hasattr(size, "__getitem__"):
                 size = [size]
-            return self.distribution.sample(size).view(size)
+            return self.distribution.sample(size).view(size).to(device)
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -62,13 +62,13 @@ class Constant(Distribution):
         value_str = tuple(self.value.detach().cpu().numpy())
         return f"{self.__class__.__qualname__}(value={value_str})"
 
-    def forward(self, size: TensorSize = 1) -> torch.Tensor:
+    def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         if self.do_rsample:
             raise NotImplemented
         else:
             if not hasattr(size, "__getitem__"):
                 size = (size,)
-            return self.value.repeat(size)
+            return self.value.repeat(size).to(device)
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -86,13 +86,13 @@ class Bernoulli(Distribution):
         self.prob = torch.nn.Parameter(torch.tensor([prob]))
         self.distribution = torch.distributions.Bernoulli(probs=self.prob)
 
-    def forward(self, size: TensorSize = 1):
+    def forward(self, size: TensorSize = 1, device="cpu"):
         if self.do_rsample:
             raise NotImplemented
         else:
             if not hasattr(size, "__getitem__"):
                 size = [size]
-            return self.distribution.sample(size).view(size)
+            return self.distribution.sample(size).view(size).to(device)
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__
@@ -120,13 +120,13 @@ class Categorical(Distribution):
         self.probs = torch.autograd.Variable(torch.Tensor([probs]))
         self.distribution = torch.distributions.Categorical(probs=self.probs)
 
-    def forward(self, size: TensorSize = 1):
+    def forward(self, size: TensorSize = 1, device="cpu"):
         if self.do_rsample:
             raise NotImplemented
         else:
             if not hasattr(size, "__getitem__"):
                 size = [size]
-            return self.distribution.sample(size).view(size)
+            return self.distribution.sample(size).view(size).to(device)
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__
@@ -149,13 +149,13 @@ class Normal(Distribution):
         self.deviation = torch.nn.Parameter(torch.Tensor([deviation]))
         self.distribution = torch.distributions.Normal(loc=self.mean, scale=self.deviation)
 
-    def forward(self, size: TensorSize = 1):
+    def forward(self, size: TensorSize = 1, device="cpu"):
         if not hasattr(size, "__getitem__"):
             size = [size]
         if self.do_rsample:
-            raise self.distribution.rsample(size).view(size)
+            raise self.distribution.rsample(size).view(size).to(device)
         else:
-            return self.distribution.sample(size).view(size)
+            return self.distribution.sample(size).view(size).to(device)
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__

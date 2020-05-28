@@ -8,7 +8,7 @@ class Rotate(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
         batch_sz = sampling_tensors[0].size(0)
-        radians = type(self).rotate_radians(batch_sz).view(-1)
+        radians = type(self).rotate_radians(batch_sz, device=sampling_tensors[0].device).view(-1)
         return (radians,)
 
     @staticmethod
@@ -27,7 +27,7 @@ class Zoom(SpatialImageAugmentation):
     scales = Uniform(value_range=(.5, 1.5))
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
-        scales = type(self).scales(sampling_tensors[0].size(0))
+        scales = type(self).scales(sampling_tensors[0].size(0), device=sampling_tensors[0].device)
         return (scales,)
 
     @staticmethod
@@ -44,8 +44,8 @@ class Scale(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
         batch_sz = sampling_tensors[0].size(0)
-        x_scales = type(self).x_scales(batch_sz)
-        y_scales = type(self).y_scales(batch_sz)
+        x_scales = type(self).x_scales(batch_sz, device=sampling_tensors[0].device)
+        y_scales = type(self).y_scales(batch_sz, device=sampling_tensors[0].device)
         return (x_scales, y_scales)
 
     @staticmethod
@@ -63,8 +63,8 @@ class Translate(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
         batch_sz = sampling_tensors[0].size(0)
-        x_offset = type(self).x_offset(batch_sz)
-        y_offset = type(self).y_offset(batch_sz)
+        x_offset = type(self).x_offset(batch_sz, device=sampling_tensors[0].device)
+        y_offset = type(self).y_offset(batch_sz, device=sampling_tensors[0].device)
         return (x_offset, y_offset)
 
     @staticmethod
@@ -84,10 +84,10 @@ class ScaleTranslate(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
         batch_sz = sampling_tensors[0].size(0)
-        x_offset = type(self).x_offset(batch_sz)
-        y_offset = type(self).y_offset(batch_sz)
-        x_scales = type(self).x_scales(batch_sz)
-        y_scales = type(self).y_scales(batch_sz)
+        x_offset = type(self).x_offset(batch_sz, device=sampling_tensors[0].device)
+        y_offset = type(self).y_offset(batch_sz, device=sampling_tensors[0].device)
+        x_scales = type(self).x_scales(batch_sz, device=sampling_tensors[0].device)
+        y_scales = type(self).y_scales(batch_sz, device=sampling_tensors[0].device)
         return (x_offset, y_offset, x_scales, y_scales)
 
     @staticmethod
@@ -105,7 +105,8 @@ class Flip(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->torch.FloatTensor:
         batch_sz = sampling_tensors[0].size(0)
-        horizontal, vertical = type(self).horizontal(batch_sz), type(self).vertical(batch_sz)
+        horizontal = type(self).horizontal(batch_sz, device=sampling_tensors[0].device)
+        vertical = type(self).vertical(batch_sz, device=sampling_tensors[0].device)
         return horizontal, vertical
 
     @staticmethod
@@ -123,10 +124,10 @@ class EraseRectangle(SpatialImageAugmentation):
 
     def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
         batch_size = sampling_tensors[0].size(0)
-        center_x = type(self).center_x(batch_size)
-        center_y = type(self).center_y(batch_size)
-        width = type(self).width(batch_size)
-        height = type(self).height(batch_size)
+        center_x = type(self).center_x(batch_size, device=sampling_tensors[0].device)
+        center_y = type(self).center_y(batch_size, device=sampling_tensors[0].device)
+        width = type(self).width(batch_size, device=sampling_tensors[0].device)
+        height = type(self).height(batch_size, device=sampling_tensors[0].device)
         return center_x, center_y, width, height
 
     @staticmethod
