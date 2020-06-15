@@ -152,7 +152,7 @@ def functional_diamond_square(output_size, roughness=.5, rnd_scale=1.0, device=N
 
     """
     if not isinstance(rnd_scale, torch.Tensor):
-        rnd_scale = torch.Tensor([rnd_scale]).view(1, 1, 1, 1)
+        rnd_scale = torch.Tensor([rnd_scale]).view(1, 1, 1, 1).to(device)
         rnd_scale = rnd_scale.expand([output_size[0] * output_size[1], 1, 1, 1])
     else:
         rnd_scale = rnd_scale.view(-1, 1, 1, 1)

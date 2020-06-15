@@ -16,12 +16,12 @@ args = {
     "print_setup": False,
     "print_setup_lines": False,
     "by_batch": False,
-    "forward_sample": (False,
-                "Should a forward_sample pass be added to estimate the overall effect of the augmentation to the training."
+    "forward_sample_img": (False,
+                "Should a forward_sample_img pass be added to estimate the overall effect of the augmentation to the training."
                 "Image size must be 3x224x224 if this is enabled"),
     "backward": (False,
                  "Should a backward pass be added to estimate the overall effect of the augmentation to the training,"
-                 " if forward_sample is false, this is ignored")
+                 " if forward_sample_img is false, this is ignored")
 }
 
 args, _ = fargv.fargv(args)
@@ -86,7 +86,7 @@ def per_batch_loader():
 
 net = torchvision.models.vgg13().to({repr(args.device)})
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.SGD(net.get_distribution_parameters(), lr=0.001, momentum=0.9)
 
 
 def run_epoch(by_batch):
@@ -96,7 +96,7 @@ def run_epoch(by_batch):
         data_loader = per_sample_loader
     for inputs, targets in data_loader:
         inputs, targets = inputs.to({repr(args.device)}), targets.to({repr(args.device)})
-        if {repr(args.forward_sample)}:
+        if {repr(args.forward_sample_img)}:
             output=net(inputs)
             loss=criterion(output,targets)
             if {repr(args.backward)}:
