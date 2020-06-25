@@ -7,7 +7,7 @@ class Brighten(ChannelImageAugmentation):
     brightness = Uniform((-1.0, 1.0))
 
     def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
-        brightness = type(self).brightness(batch.size(0)).view(-1)
+        brightness = type(self).brightness(batch.size(0), device=batch.device).view(-1)
         return brightness,
 
     @staticmethod
@@ -20,7 +20,7 @@ class Saturate(ChannelImageAugmentation):
     saturation = Uniform((0.0, 1.0))
 
     def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
-        saturation = type(self).saturation(batch.size(0)).view(-1)
+        saturation = type(self).saturation(batch.size(0), device=batch.device).view(-1)
         return saturation,
 
     @staticmethod
@@ -33,7 +33,7 @@ class Contrast(ChannelImageAugmentation):
     contrast = Uniform((0.0, 1.0))
 
     def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
-        contrast = type(self).contrast(batch.size(0)).view(-1)
+        contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
         return contrast,
 
     @staticmethod

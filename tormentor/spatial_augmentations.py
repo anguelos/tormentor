@@ -12,7 +12,7 @@ class Rotate(SpatialImageAugmentation):
         return (radians,)
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, radians:torch.FloatTensor)->SamplingField:
+    def functional_sampling_filed(sampling_field:SamplingField, radians:torch.FloatTensor)->SamplingField:
         field_x, field_y = sampling_field
         radians = radians.unsqueeze(dim=1).unsqueeze(dim=1)
         cos_th = torch.cos(radians)
@@ -31,7 +31,7 @@ class Zoom(SpatialImageAugmentation):
         return (scales,)
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, scales:torch.FloatTensor):
+    def functional_sampling_filed(sampling_field:SamplingField, scales:torch.FloatTensor):
         scales = scales.unsqueeze(dim=1).unsqueeze(dim=2)
         return scales * sampling_field[0], scales * sampling_field[1]
 
@@ -49,7 +49,7 @@ class Scale(SpatialImageAugmentation):
         return (x_scales, y_scales)
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
+    def functional_sampling_filed(sampling_field:SamplingField, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
         x_scales = x_scales.unsqueeze(dim=1).unsqueeze(dim=2)
         y_scales = y_scales.unsqueeze(dim=1).unsqueeze(dim=2)
         return x_scales * sampling_field[0], y_scales * sampling_field[1]
@@ -68,7 +68,7 @@ class Translate(SpatialImageAugmentation):
         return (x_offset, y_offset)
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor):
+    def functional_sampling_filed(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor):
         x_offset = x_offset.unsqueeze(dim=1).unsqueeze(dim=2)
         y_offset = y_offset.unsqueeze(dim=1).unsqueeze(dim=2)
         return x_offset + sampling_field[0], y_offset + sampling_field[1]
@@ -91,7 +91,7 @@ class ScaleTranslate(SpatialImageAugmentation):
         return (x_offset, y_offset, x_scales, y_scales)
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
+    def functional_sampling_filed(sampling_field:SamplingField, x_offset:torch.FloatTensor, y_offset:torch.FloatTensor, x_scales:torch.FloatTensor, y_scales:torch.FloatTensor):
         x_offset = x_offset.unsqueeze(dim=1).unsqueeze(dim=2)
         y_offset = y_offset.unsqueeze(dim=1).unsqueeze(dim=2)
         x_scales = x_scales.unsqueeze(dim=1).unsqueeze(dim=2)
@@ -110,7 +110,7 @@ class Flip(SpatialImageAugmentation):
         return horizontal, vertical
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, horizontal:torch.FloatTensor, vertical:torch.FloatTensor):
+    def functional_sampling_filed(sampling_field:SamplingField, horizontal:torch.FloatTensor, vertical:torch.FloatTensor):
         horizontal = ((1-horizontal) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
         vertical = ((1 - vertical) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
         return horizontal * sampling_field[0], vertical * sampling_field[1]
@@ -131,7 +131,7 @@ class EraseRectangle(SpatialImageAugmentation):
         return center_x, center_y, width, height
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, center_x:torch.FloatTensor, center_y:torch.FloatTensor, width:torch.FloatTensor, height:torch.FloatTensor)->SamplingField:
+    def functional_sampling_filed(sampling_field:SamplingField, center_x:torch.FloatTensor, center_y:torch.FloatTensor, width:torch.FloatTensor, height:torch.FloatTensor)->SamplingField:
         center_x = center_x.view(-1, 1, 1)
         center_y = center_y.view(-1, 1, 1)
         width = width.view(-1, 1, 1)

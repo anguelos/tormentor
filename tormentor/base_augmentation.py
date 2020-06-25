@@ -7,10 +7,11 @@ from typing import Tuple, Union
 
 
 SamplingField = Tuple[torch.FloatTensor, torch.FloatTensor]
+PointCloud = Tuple[torch.FloatTensor, torch.FloatTensor]
 SpatialAugmentationState = Tuple[torch.Tensor, ...]
 
 
-class BatchAugmentationFactory(torch.nn.Module):
+class AugmentationLayer(torch.nn.Module):
     """Generates deterministic augmentations.
 
     It is a serializable generator that can override default random get_distribution_parameters.
@@ -32,29 +33,6 @@ class BatchAugmentationFactory(torch.nn.Module):
 
     def create_persistent(self):
         return self.augmentation_cls()
-
-
-class BatchMultiAugmentationFactory(BatchAugmentationFactory):
-    def __init__(self, augmentation_cls_list):
-        super().__init__()
-        self.augmentation_distributions = {}
-        self.augmentation_cls_list = augmentation_cls_list
-        for cls in augmentation_cls_list:
-            cls_distributions = {f"{cls.__qualname__}.{k}": v.copy() for k, v in cls.distributions.items()}
-            self.augmentation_distributions.update(cls_distributions)
-        self.augmentation_distributions = torch.nn.ModuleDict(self.augmentation_distributions)
-        self.selection_distribution = Categorical(n_categories=len(augmentation_cls_list))
-
-    def forward(self, x, is_mask=False, is_points=False):
-        if self.training:
-            return self.create_persistent()(x, is_mask=is_mask, is_points=False)
-        else:
-            return x
-
-    def create_persistent(self):
-        self.selection_distribution.sample(0).item()
-        return self.augmentation_cls()
-
 
 
 class DeterministicImageAugmentation(object):
@@ -171,31 +149,110 @@ class DeterministicImageAugmentation(object):
     @classmethod
     def override_distributions(cls, requires_grad=False, **kwargs):
         cls_distributions = cls.get_distributions()
-        #for k, v in kwargs.items():
-        #    print(k, (type(v)))
-        print(kwargs.values())
         assert all([isinstance(v, Distribution) for v in kwargs.values()])
-        print(kwargs.keys())
-        print(cls_distributions.keys())
         assert set(kwargs.keys()) <= set(cls_distributions.keys())
         cls_distributions.update(kwargs)
-        print(cls_distributions)
         for cls_distribution in cls_distributions.values():
             for parameter in cls_distribution.get_distribution_parameters().values():
                 parameter.requires_grad_(requires_grad)
-        new_cls_name = f"{cls.__qualname__}_{torch.randint(1000000,9000000,(1,)).item()}"
+        ridx = cls.__qualname__.rfind("_")
+        if ridx == -1:
+            cls_oldname = cls.__qualname__
+        else:
+            cls_oldname = cls.__qualname__[:ridx]
+        new_cls_name = f"{cls_oldname}_{torch.randint(1000000,9000000,(1,)).item()}"
         new_cls = type(new_cls_name, (cls,), cls_distributions)
         return new_cls
-
-    @classmethod
-    def factory(cls, **kwargs):
-        return BatchAugmentationFactory(cls, **kwargs)
 
     @property
     def device(self):
         type(self).occurence.prob.device
 
-    def forward_points(self, coords: SamplingField)->SamplingField:
+
+    def forward_bboxes(self, bboxes:torch.FloatTensor, image_tensor=None, width_height=None):
+        """Applies a transformation on Image coordinate defined bounding boxes.
+
+        Bounding Boxes are encoded as [Left, Top, Right, Bottom]
+
+        Args:
+            bboxes (torch.FloatTensor) : A tensor with bboxes for a sample [N x 4] or a batch [S x N x 4]
+            image_tensor (torch.FloatTensor): A valid batch image tensor [S x C x W x H] or sample image tensor
+                [C x H x W]. In both cases it only used to normalise bbox coordinates and can be omitted if width_height
+                is specified.
+            width_height (int, int ): Values used to normalise bbox coordinates to [-1,1] and back, should be ommited if
+                image tensor is passed
+
+        Returns: a tensor with the bounding boxes of the transformed bounding box.
+
+
+        """
+        if len(bboxes.size()) == 2:
+            bboxes = bboxes.unsqueeze(dim=0)
+        if image_tensor is not None:
+            width=image_tensor.size(-2)
+            height=image_tensor.size(-1)
+        else:
+            width, height = width_height
+
+        normalise_bboxes = torch.tensor([[width * .5, height * .5, width * .5, height * .5]])
+        normalised_bboxes = bboxes/normalise_bboxes -1
+        bboxes_left = normalised_bboxes[:, 0].unsqueeze(dim=0).unsqueeze(dim=0)
+        bboxes_top = normalised_bboxes[:, 1].unsqueeze(dim=0).unsqueeze(dim=0)
+        bboxes_right = normalised_bboxes[:, 2].unsqueeze(dim=0).unsqueeze(dim=0)
+        bboxes_bottom = normalised_bboxes[:, 3].unsqueeze(dim=0).unsqueeze(dim=0)
+        bboxes_x = torch.concat([bboxes_left, bboxes_right, bboxes_right, bboxes_left], dim=1)
+        bboxes_y = torch.concat([bboxes_top, bboxes_top, bboxes_bottom, bboxes_bottom], dim=1)
+
+        pointcloud = (bboxes_x, bboxes_y)
+        pointcloud = self.forward_point_cloud(pointcloud)
+        pointcloud = torch.clamp(pointcloud[0], -1, 1), torch.clamp(pointcloud[0], -1, 1)
+
+        left = ((pointcloud[0].min(dim=1) + 1) * .5 * width).view(-[1,1])
+        right = ((pointcloud[0].max(dim=1) + 1) * .5 * width).view(-[1,1])
+        top = ((pointcloud[1].min(dim=1)+1) *.5 * height).view(-[1,1])
+        bottom = ((pointcloud[1].max(dim=1) + 1) * .5 * height).view(-[1,1])
+        result_bboxes = torch.concat([left, top, right, bottom], dim=1)
+
+        return result_bboxes
+
+
+    def forward_point_cloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
+        """Applies a transformation on normalised coordinate points.
+
+        This method assumes the transform differs by
+
+        Args:
+            pc (torch.Tensor, torch.Tensor): Normalised [-1, 1] coordinates to be transformed. the tensors first
+                dimension is the batch dimension.
+            batch_tensor (): A batch image tensor used to infer the size to populate the sampling field.
+
+        Returns:
+
+        """
+        assert (pc[0].size(0) == pc[1].size(0) == batch_tensor.size(0))
+        assert len(pc[0].size()) == len(pc[1].size()) == len(batch_tensor.size()) - 1 == 3
+        batch_sz, _, width, height = batch_tensor.size()
+
+        sampling_field_tensor = K.utils.create_meshgrid(width, height, normalized_coordinates=True, device=batch_tensor.device)
+        sampling_field_tensor = sampling_field_tensor.repeat(batch_sz, 1, 1, 1)
+        sampling_field = sampling_field_tensor[:, :, :, 0], sampling_field_tensor[:, :, :, 1]
+
+        sampling_field = self.forward_sampling_field(sampling_field)
+
+        sampling_field = torch.clamp(sampling_field[0],-1,1),torch.clamp(sampling_field[1],-1,1)
+
+        pixel_sampling_field = (sampling_field[0]+1)*.5*width, (sampling_field[0]+1)*.5*height
+
+        input_x, input_y = pc
+        input_x = torch.clamp(input_x, 0, width - 1).contiguous()
+        input_y = torch.clamp(input_y, 0, height - 1).contiguous()
+        input_sample_id = (torch.ones_like(pc[0]).cumsum(dim=0) - 1).contiguous()
+        output_x = pixel_sampling_field[0][input_sample_id.view(-1),input_x.view(-1),input_y.view(-1)].contiguous()
+        output_y = pixel_sampling_field[1][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
+        return output_x.view(input_x.size()), output_y.view(output_y.size())
+
+
+    def forward_sampling_field(self, coords: SamplingField)->SamplingField:
         """Defines a spatial transform.
 
         Args:
@@ -239,7 +296,7 @@ class ChannelImageAugmentation(DeterministicImageAugmentation):
     def forward_mask(self,X):
         return X
 
-    def forward_points(self, coords: SamplingField)->SamplingField:
+    def forward_sampling_field(self, coords: SamplingField)->SamplingField:
         """Identity spatial augmentation.
 
         Args:
@@ -251,15 +308,14 @@ class ChannelImageAugmentation(DeterministicImageAugmentation):
         return coords
 
 
+
+
 class SpatialImageAugmentation(DeterministicImageAugmentation):
     outside_field = 10
 
-    @property
-    def applicable_on_mask(self):
-        return True
-
-    def forward_mask(self, X):
-        return self.forward(X)
+    @staticmethod
+    def functional_sampling_filed(self, coords: SamplingField)->SamplingField:
+        raise NotImplementedError()
 
     def forward_batch_img(self, batch_tensor):
         batch_sz, channels, width, height = batch_tensor.size()
@@ -267,14 +323,14 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         xy_coords = xy_coords.repeat(batch_sz, 1, 1, 1)
         x_coords = xy_coords[:, :, :, 0]
         y_coords = xy_coords[:, :, :, 1]
-        x_coords, y_coords = self.forward_points((x_coords, y_coords))
+        x_coords, y_coords = self.forward_sampling_field((x_coords, y_coords))
         xy_coords = torch.cat((x_coords.view(batch_sz, width, height, 1), y_coords.view(batch_sz, width, height, 1)), 3)
         augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor, xy_coords)
         return augmented_batch_tensor
 
-    def forward_points(self, coords: SamplingField)->SamplingField:
+    def forward_sampling_field(self, coords: SamplingField)->SamplingField:
         state = self.generate_batch_state(coords)
-        return type(self).functional_points(*((coords,) + state))
+        return type(self).functional_sampling_filed(*((coords,) + state))
 
     @staticmethod
     def render_functional_forward_points(batch_tensor, augmentation_type, state):
@@ -294,41 +350,73 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         xy_coords = xy_coords.repeat(batch_sz, 1, 1, 1)
         x_coords = xy_coords[:, :, :, 0]
         y_coords = xy_coords[:, :, :, 1]
-        x_coords, y_coords = augmentation_type.functional_points(*(((x_coords, y_coords),)+state))
+        x_coords, y_coords = augmentation_type.functional_sampling_filed(*(((x_coords, y_coords),) + state))
         xy_coords = torch.cat((x_coords.view(batch_sz, width, height, 1), y_coords.view(batch_sz, width, height, 1)), 3)
         augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor, xy_coords)
         return augmented_batch_tensor
 
 
+class AugmentationCascade(DeterministicImageAugmentation):
+    @classmethod
+    def create(cls, augmentation_list):
+
+        ridx = cls.__qualname__.rfind("_")
+        if ridx == -1:
+            cls_oldname = cls.__qualname__
+        else:
+            cls_oldname = cls.__qualname__[:ridx]
+        new_cls_name = f"{cls_oldname}_{torch.randint(1000000,9000000,(1,)).item()}"
+        new_cls = type(new_cls_name, (cls,), augmentation_list)
+        return new_cls
+
+    def forward_sampling_field(self, coords: SamplingField):
+        for augmentation_type in type(self).augmentation_list:
+            augmentation = augmentation_type()
+            coords = augmentation(coords)
+        return coords
+
+    def forward_batch_img(self, batch_tensor):
+        for augmentation_type in type(self).augmentation_list:
+            augmentation = augmentation_type()
+            batch_tensor = augmentation.forward_batch_img(batch_tensor)
+        return batch_tensor
+
+
 class AugmentationChoice(DeterministicImageAugmentation):
     @classmethod
     def create(cls, augmentation_list, requires_grad=False):
-        all_distributions = {"choice": Categorical(len(augmentation_list), requires_grad=requires_grad)}
+        new_parameters = {"choice": Categorical(len(augmentation_list)),"available_augmentations": augmentation_list}
         for augmentation in augmentation_list:
             class_name = str(augmentation).split(".")[-1][:-2]
             cls_distributions = augmentation.get_distributions()
-            cls_distributions = {f"{class_name}_{k}": v for k, v in cls_distributions.get_items()}
-            all_distributions.update(cls_distributions)
-        for cls_distribution in cls_distributions:
-            for parameter in cls_distribution.get_distribution_parameters():
+            cls_distributions = {f"{class_name}_{k}": v for k, v in cls_distributions.items()}
+            new_parameters.update(cls_distributions)
+        for cls_distribution in cls_distributions.values():
+            for parameter in cls_distribution.get_distribution_parameters().values():
                 parameter.requires_grad_(requires_grad)
-        new_cls_name = f"{cls.__qualname__}_{torch.randint(1000000,9000000,(1,)).item()}"
-        new_cls = type(new_cls_name, (cls,), cls_distributions)
+        ridx = cls.__qualname__.rfind("_")
+        if ridx == -1:
+            cls_oldname = cls.__qualname__
+        else:
+            cls_oldname = cls.__qualname__[:ridx]
+        new_cls_name = f"{cls_oldname}_{torch.randint(1000000,9000000,(1,)).item()}"
+        new_cls = type(new_cls_name, (cls,), new_parameters)
         return new_cls
 
-    def forward_points(self, coords: SamplingField):
+    def forward_sampling_field(self, coords: SamplingField):
         batch_sz = coords[0].size(0)
         augmentation_ids = type(self).choice(batch_sz)
-        batch_augmented_x = []
-        batch_augmented_y = []
+        augmented_batch_x = []
+        augmented_batch_y = []
         for sample_n in range(batch_sz):
-            sample_coords = (c[sample_n:sample_n + 1, :, :] for c in coords)
-            sample_augmented_x, sample_augmented_y = augmentation_ids[sample_n].forward_points(sample_coords)
-            batch_augmented_x.append(sample_augmented_x)
-            batch_augmented_y.append(sample_augmented_y)
-        batch_augmented_x = torch.cat(batch_augmented_x, dim=0)
-        batch_augmented_y = torch.cat(batch_augmented_y, dim=0)
-        return batch_augmented_x, batch_augmented_y
+            sample_coords = sample_coords[0][sample_n:sample_n + 1, :, :], sample_coords[1][sample_n:sample_n + 1, :, :]
+            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
+            sample_x, sample_y = augmentation(sample_coords)
+            augmented_batch_x.append(sample_x)
+            augmented_batch_y.append(sample_y)
+        augmented_batch_x = torch.cat(augmented_batch_x, dim=0)
+        augmented_batch_y = torch.cat(augmented_batch_y, dim=0)
+        return augmented_batch_x, augmented_batch_y
 
     def forward_batch_img(self, batch_tensor):
         batch_sz = batch_tensor.size(0)
@@ -336,7 +424,8 @@ class AugmentationChoice(DeterministicImageAugmentation):
         augmented_batch = []
         for sample_n in range(batch_sz):
             sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
-            augmented_sample = augmentation_ids[sample_n].forward_batch_img(sample_tensor)
+            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
+            augmented_sample = augmentation.forward_batch_img(sample_tensor)
             augmented_batch.append(augmented_sample)
         augmented_batch = torch.cat(augmented_batch, dim=0)
         return augmented_batch

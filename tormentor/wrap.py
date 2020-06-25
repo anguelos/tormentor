@@ -5,25 +5,27 @@ import torch
 
 
 class WrapAugmentation(SpatialImageAugmentation):
-    pixel_scale = Uniform(value_range=(1.0, 10.0))
-    roughness = Uniform(value_range=(.4, .8))
+    pixel_scale = Uniform(value_range=(.0, .2))
+    pixel_scale_hwratio = Uniform(value_range=(10., 10.))
+    roughness = Uniform(value_range=(.3, .8))
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
         batch_sz, width, height = sampling_tensors[0].size()
         pixel_scales = type(self).pixel_scale(batch_sz, device=sampling_tensors[0].device)
+        pixel_scale_hwratios = type(self).pixel_scale_hwratio(batch_sz, device=sampling_tensors[0].device)
         roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
         plasma_sz = (batch_sz, 1, width, height)
-        plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
-        plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
-        return plasma_x, plasma_y, pixel_scales
+        plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)-.5
+        plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)-.5
+        return plasma_x, plasma_y, pixel_scales, pixel_scale_hwratios
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor)->SamplingField:
-        print(sampling_field[0].size(),sampling_field[1].size())
+    def functional_sampling_filed(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor, pixel_scale_hwratios:torch.FloatTensor)->SamplingField:
         pixel_scales = pixel_scales.view(-1, 1, 1)
         field_x, field_y = sampling_field
-        sampling_field = field_x + plasma_x[:, 0, :, :] * pixel_scales, field_y + plasma_y[:, 0, :, :] * pixel_scales
-        return sampling_field
+        h_pixel_scales = pixel_scales * (1 / pixel_scale_hwratios)
+        v_pixel_scales = pixel_scales * pixel_scale_hwratios
+        return field_x + plasma_x[:, 0, :, :] * h_pixel_scales, field_y + plasma_y[:, 0, :, :] * v_pixel_scales
 
 
 class ShredAugmentation(SpatialImageAugmentation):
@@ -41,7 +43,7 @@ class ShredAugmentation(SpatialImageAugmentation):
         return plasma, inside, erase_percentile
 
     @staticmethod
-    def functional_points(sampling_field:SamplingField, plasma:torch.FloatTensor, inside:torch.FloatTensor, erase_percentile:torch.FloatTensor)->SamplingField:
+    def functional_sampling_filed(sampling_field:SamplingField, plasma:torch.FloatTensor, inside:torch.FloatTensor, erase_percentile:torch.FloatTensor)->SamplingField:
         inside = inside.view(-1, 1, 1, 1)
         erase_percentile = erase_percentile.view(-1, 1, 1, 1)
         plasma = inside * plasma + (1-inside) * (1-plasma)
