@@ -20,7 +20,7 @@ class WrapAugmentation(SpatialImageAugmentation):
         return plasma_x, plasma_y, pixel_scales, pixel_scale_hwratios
 
     @staticmethod
-    def functional_sampling_filed(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor, pixel_scale_hwratios:torch.FloatTensor)->SamplingField:
+    def functional_sampling_field(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor, pixel_scale_hwratios:torch.FloatTensor)->SamplingField:
         pixel_scales = pixel_scales.view(-1, 1, 1)
         field_x, field_y = sampling_field
         h_pixel_scales = pixel_scales * (1 / pixel_scale_hwratios)
@@ -43,7 +43,7 @@ class ShredAugmentation(SpatialImageAugmentation):
         return plasma, inside, erase_percentile
 
     @staticmethod
-    def functional_sampling_filed(sampling_field:SamplingField, plasma:torch.FloatTensor, inside:torch.FloatTensor, erase_percentile:torch.FloatTensor)->SamplingField:
+    def functional_sampling_field(sampling_field:SamplingField, plasma:torch.FloatTensor, inside:torch.FloatTensor, erase_percentile:torch.FloatTensor)->SamplingField:
         inside = inside.view(-1, 1, 1, 1)
         erase_percentile = erase_percentile.view(-1, 1, 1, 1)
         plasma = inside * plasma + (1-inside) * (1-plasma)

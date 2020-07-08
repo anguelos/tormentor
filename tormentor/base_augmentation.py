@@ -3,11 +3,14 @@ from itertools import count
 import types
 import kornia as K
 from .random import Distribution, Uniform, Bernoulli, Categorical
-from typing import Tuple, Union
+from typing import Tuple, Union, List
+from matplotlib import pyplot as plt
 
 
 SamplingField = Tuple[torch.FloatTensor, torch.FloatTensor]
 PointCloud = Tuple[torch.FloatTensor, torch.FloatTensor]
+PointCloudList = List[PointCloud]
+PointCloudOneOrMore = Union[PointCloudList, PointCloud]
 SpatialAugmentationState = Tuple[torch.Tensor, ...]
 
 
@@ -106,20 +109,22 @@ class DeterministicImageAugmentation(object):
             else:
                 raise ValueError("sampling fields must represent a sample or a batch")
 
-    def augment_pointcloud(self, pc:PointCloud, image_tensor:torch.FloatTensor):
-        assert pc[0].size() == pc[1].size()
-        device = pc[0].device
+    def augment_pointcloud(self, pc: PointCloudOneOrMore, image_tensor:torch.FloatTensor):
+        if isinstance(pc, list):
+            device = pc[0][0].device
+        else:
+            device = pc[0].device
         with torch.random.fork_rng(devices=(device,)):
             torch.manual_seed(self.seed)
-            n_dims = len(pc[0].size())
-            if n_dims == 2:
-                assert len(image_tensor.size()) == 3
-                pc = pc[0].unsqueeze(dim=0), pc[1].unsqueeze(dim=0)
-                pc = self.forward_point_cloud(pc, image_tensor.unsqueeze(dim=0))
-                return pc[0][0, :, :], pc[1][0, :, :]
-            elif n_dims == 3:
+            if isinstance(pc, list):
                 assert len(image_tensor.size()) == 4
-                return self.forward_point_cloud(pc, image_tensor)
+                out_pc = self.forward_pointcloud(pc, image_tensor)
+                return pc
+            elif isinstance(pc[0], torch.Tensor):
+                print(image_tensor.size())
+                assert len(image_tensor.size()) == 3
+                out_pc = self.forward_pointcloud([pc], image_tensor.unsqueeze(dim=0))[0]
+                return out_pc
             else:
                 raise ValueError("point clouds must represent a sample or a batch")
 
@@ -127,18 +132,14 @@ class DeterministicImageAugmentation(object):
         # practiaclly method overloading
         # if I could only test objects for Typing Generics
         assert len(args) == 1 or len(args) == 2
-        if len(args) == 2: # pointcloud and reference image
-            assert 2 <= len(args[0][0].size()) <= 3
-            print("Running pointcloud")
+        if len(args) == 2: # pointcloud and image tensor
             pointcloud, image_tensor = args
             return self.augment_pointcloud(pointcloud, image_tensor)
         elif isinstance(args[0], tuple): # sampling field
             assert (2 <= len(args[0][0].size()) <= 3) and len(args[1].size()) == 2
-            print("Running Sampling Field")
             return self.augment_sampling_field(args[0])
         elif isinstance(args[0], torch.Tensor): # image
             assert 3 <= len(args[0].size()) <= 4
-            print("Running image")
             return self.augment_image(args[0])
 
 
@@ -159,15 +160,15 @@ class DeterministicImageAugmentation(object):
                 attribute_strings.append(f"{name}:{repr(attribute)}")
         return self.__class__.__qualname__ + ":\n\t" + "\n\t".join(attribute_strings)
 
-    def forward_sample_img(self, tensor_image):
-        """Distorts a single image.
-
-        Abstract method that must be implemented by all augmentations.
-
-        :param tensor_image: Images are 3D tensors of [#channels, width, height] size.
-        :return: A create_persistent 3D tensor [#channels, width, height] with the create_persistent image.
-        """
-        return self.forward_batch_img(tensor_image.unsqueeze(dim=0))[0, :, :, :]
+    # def forward_sample_img(self, tensor_image):
+    #     """Distorts a single image.
+    #
+    #     Abstract method that must be implemented by all augmentations.
+    #
+    #     :param tensor_image: Images are 3D tensors of [#channels, width, height] size.
+    #     :return: A create_persistent 3D tensor [#channels, width, height] with the create_persistent image.
+    #     """
+    #     return self.forward_batch_img(tensor_image.unsqueeze(dim=0))[0, :, :, :]
 
     def forward_batch_img(self, batch_tensor):
         """Distorts a a batch of one or more images.
@@ -175,7 +176,7 @@ class DeterministicImageAugmentation(object):
         :param batch_tensor: Images are 4D tensors of [batch_size, #channels, width, height] size.
         :return: A create_persistent 4D tensor [batch_size, #channels, width, height] with the create_persistent image.
         """
-        assert type(self).forward_batch_img is not DeterministicImageAugmentation.forward_sample_img
+        #assert type(self).forward_batch_img is not DeterministicImageAugmentation.forward_sample_img
         augmented_tensors = []
         for n in range(batch_tensor.size(0)):
             augmented_tensors.append(self.forward_sample_img(batch_tensor[n, :, :, :]))
@@ -228,7 +229,7 @@ class DeterministicImageAugmentation(object):
         raise NotImplementedError
 
 
-    def forward_point_cloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
+    def forward_pointcloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
         """Applies a transformation on normalised coordinate points.
 
         This method assumes the transform differs by
@@ -295,13 +296,13 @@ class ChannelImageAugmentation(DeterministicImageAugmentation):
         return bboxes
 
 
-    def forward_point_cloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
+    def forward_pointcloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
         return pc
 
 
 
 class SpatialImageAugmentation(DeterministicImageAugmentation):
-    outside_field = 10
+    #outside_field = 10
 
     @staticmethod
     def functional_sampling_field(self, coords: SamplingField)->SamplingField:
@@ -309,13 +310,30 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
 
     def forward_batch_img(self, batch_tensor):
         batch_sz, channels, width, height = batch_tensor.size()
-        xy_coords = K.utils.create_meshgrid(width, height, normalized_coordinates=True, device=batch_tensor.device)
+        print("BCWH Input Size:", batch_tensor.size())
+        batch_tensor=batch_tensor.transpose(2,3) # BCWH -> BCHW
+        print("BCHW Input Size:", batch_tensor.size())
+
+        #xy_coords = K.utils.create_meshgrid(width, height, normalized_coordinates=True, device=batch_tensor.device)
+        xy_coords = K.utils.create_meshgrid(height, width, normalized_coordinates=True, device=batch_tensor.device)
         xy_coords = xy_coords.repeat(batch_sz, 1, 1, 1)
         x_coords = xy_coords[:, :, :, 0]
         y_coords = xy_coords[:, :, :, 1]
+
         x_coords, y_coords = self.forward_sampling_field((x_coords, y_coords))
-        xy_coords = torch.cat((x_coords.view(batch_sz, width, height, 1), y_coords.view(batch_sz, width, height, 1)), dim=3)
-        augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor, xy_coords)
+
+        # TODO (anguelos)
+        xy_coords = torch.cat((x_coords.unsqueeze(dim=-1), y_coords.unsqueeze(dim=-1)), dim=3)
+        #augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor.transpose(2, 3), xy_coords[:, :, :, [1, 0]])
+
+        #augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor, xy_coords[:, :, :, [1,0]].transpose(1,2))
+        print("Before GS:",batch_tensor.size(), xy_coords.size())
+        augmented_batch_tensor = torch.nn.functional.grid_sample(batch_tensor, xy_coords[:, :, :, [0,1]])
+        print("After GS:",augmented_batch_tensor.size(), xy_coords.size())
+
+        print("BCHW Return Size:", augmented_batch_tensor.size())
+        augmented_batch_tensor=augmented_batch_tensor.transpose(2,3) # BCHW -> BCWH
+        print("BCWH Return Size:", augmented_batch_tensor.size())
         return augmented_batch_tensor
 
     def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
@@ -357,7 +375,7 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         bboxes_y = torch.concat([bboxes_top, bboxes_top, bboxes_bottom, bboxes_bottom], dim=1)
 
         pointcloud = (bboxes_x, bboxes_y)
-        pointcloud = self.forward_point_cloud(pointcloud)
+        pointcloud = self.forward_pointcloud(pointcloud)
         pointcloud = torch.clamp(pointcloud[0], -1, 1), torch.clamp(pointcloud[0], -1, 1)
 
         left = ((pointcloud[0].min(dim=1) + 1) * .5 * width).view(-[1,1])
@@ -368,8 +386,7 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
 
         return result_bboxes
 
-
-    def forward_point_cloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor)->PointCloud:
+    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor)->PointCloud:
         """Applies a transformation on normalised coordinate points.
 
         This method assumes the transform differs by
@@ -382,32 +399,90 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         Returns:
 
         """
-        assert (pc[0].size(0) == pc[1].size(0) == batch_tensor.size(0))
-        assert len(pc[0].size()) == len(pc[1].size()) == len(batch_tensor.size()) - 1 == 3
         batch_sz, _, width, height = batch_tensor.size()
 
         sampling_field_tensor = K.utils.create_meshgrid(width, height, normalized_coordinates=True, device=batch_tensor.device)
         sampling_field_tensor = sampling_field_tensor.repeat(batch_sz, 1, 1, 1)
-        sampling_field = sampling_field_tensor[:, :, :, 0], sampling_field_tensor[:, :, :, 1]
+        in_sampling_field = sampling_field_tensor[:, :, :, 0], sampling_field_tensor[:, :, :, 1]
 
-        sampling_field = self.forward_sampling_field(sampling_field)
+        out_sampling_field = self.forward_sampling_field(in_sampling_field)
+        out_pcl = []
+        for batch_n in range(batch_sz):
+            pc = pcl[batch_n]
+            #pc_normalised = pc[0].view([-1])/(width*.5)-1, pc[1].view([-1])/(height*.5)-1
+            pc_normalised = pc[0]/(width*.5)-1, pc[1]/(height*.5)-1
+            X_dst, Y_dst = out_sampling_field[0][batch_n, :, :].view(-1), out_sampling_field[1][batch_n, :, :].view(-1)
+            X_src, Y_src = in_sampling_field[0][batch_n, :, :].view(-1), in_sampling_field[1][batch_n, :, :].view(-1)
+            nearest_neighbor_src_X = torch.empty_like(pc_normalised[0])
+            nearest_neighbor_src_Y = torch.empty_like(pc_normalised[1])
 
-        sampling_field = torch.clamp(sampling_field[0], -1, 1), torch.clamp(sampling_field[1], -1, 1)
+            # TODO(anguelos) should we indirectly allow control over gpu
+            step = 10000000 // (width*height) # This is about GPU memory
 
-        pixel_sampling_field = (sampling_field[0]+1) * .5 * width, (sampling_field[1]+1) * .5 * height
+            for n in range(0, pc_normalised[0].size(0), step):
+                pc_x, pc_y = pc_normalised[0][n: n+step], pc_normalised[1][n:n+step]
+                #euclidean = ((X_src.view(1, -1)-pc_x.view(-1, 1))**2+(Y_src.view(1, -1)-pc_y.view(-1, 1))**2)
+                euclidean = ((X_dst.view(1, -1)-pc_x.view(-1, 1))**2+(Y_dst.view(1, -1)-pc_y.view(-1, 1))**2)
 
-        input_x, input_y = pc
-        input_x = torch.clamp(input_x, 0, width - 1).contiguous().long()
-        input_y = torch.clamp(input_y, 0, height - 1).contiguous().long()
+                #plt.imshow(euclidean[-1, :].view([width, height]))
+                #plt.show()
 
-        input_sample_id = (torch.ones_like(pc[0]).cumsum(dim=0) - 1).contiguous().long()
+                idx = torch.argmin(euclidean, dim=1)
+                #print(idx)
+                #print("\n\nbefore nearest_neighbor_src_X\n",nearest_neighbor_src_X)
+                nearest_neighbor_src_X[n:n+step] = X_src[idx][:]
+                #print("\n\nafter nearest_neighbor_src_X\n",nearest_neighbor_src_X)
+                nearest_neighbor_src_Y[n:n+step] = Y_src[idx]
+                #print("X_src[idx]",X_src[idx])
+            #plt.plot(pc_normalised[0], pc_normalised[1], ".")
+            #plt.show()
+            #plt.plot(nearest_neighbor_src_X, nearest_neighbor_src_Y,".")
+            #plt.show()
+            out_pc = (nearest_neighbor_src_X+1)*.5*width, (nearest_neighbor_src_Y+1) * .5 * height
+            #print("out_pc[0]",out_pc[0])
+            out_pcl.append(out_pc)
+        #print(pcl)
+        #print(out_pcl)
+        return out_pcl
 
-        output_x = pixel_sampling_field[0][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
-        output_y = pixel_sampling_field[1][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
-        #output_x = pixel_sampling_field[0][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
-        #output_y = pixel_sampling_field[1][input_sample_id.view(-1), input_y.view(-1), input_x.view(-1)].contiguous()
 
-        return output_x.view(input_x.size()), output_y.view(input_y.size())
+
+
+
+
+
+
+#sampling_field = -torch.clamp(sampling_field[0], -1, 1), -torch.clamp(sampling_field[1], -1, 1)
+
+        # #Reversing the augmetation effect so that the augmentaion is rendered instead of sampled
+        # #delta_sampling_field = out_sampling_field - in_sampling_field
+        # #out_sampling_field = in_sampling_field - delta_sampling_field
+        #
+        # delta_sampling_field = out_sampling_field[0] - in_sampling_field[0], out_sampling_field[1] - in_sampling_field[1]
+        # out_sampling_field = in_sampling_field[0] - delta_sampling_field[0], in_sampling_field[1] - delta_sampling_field[1]
+        # del delta_sampling_field
+        #
+        # out_sampling_field = torch.clamp(out_sampling_field[0], -1, 1), torch.clamp(out_sampling_field[1], -1, 1)
+        #
+        # #sampling_field = -torch.clamp(sampling_field[0], -1, 1), -torch.clamp(sampling_field[1], -1, 1)
+        #
+        # #pixel_sampling_field = (sampling_field[0]+1) * .5 * height, (sampling_field[1]+1) * .5 * width
+        # pixel_sampling_field = (in_sampling_field[0]+1) * .5 * width, (in_sampling_field[1]+1) * .5 * height
+        #
+        # #input_x, input_y = pc[1],pc[0]
+        # input_x, input_y = pc
+        # input_x = torch.clamp(input_x, 0, width - 1).contiguous().long()
+        # input_y = torch.clamp(input_y, 0, height - 1).contiguous().long()
+        #
+        # input_sample_id = (torch.ones_like(pc[0]).cumsum(dim=0) - 1).contiguous().long()
+        #
+        #
+        # output_x = pixel_sampling_field[0][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
+        # output_y = pixel_sampling_field[1][input_sample_id.view(-1), input_x.view(-1), input_y.view(-1)].contiguous()
+        #
+        # return output_y.view(input_x.size()), output_x.view(input_y.size())
+        # #return output_x.view(input_x.size()), output_y.view(input_y.size())
+
 
     # @staticmethod
     # def render_functional_forward_points(batch_tensor, augmentation_type, state):
@@ -502,6 +577,7 @@ class AugmentationChoice(DeterministicImageAugmentation):
         augmented_batch_x = torch.cat(augmented_batch_x, dim=0)
         augmented_batch_y = torch.cat(augmented_batch_y, dim=0)
         return augmented_batch_x, augmented_batch_y
+
 
     def forward_batch_img(self, batch_tensor):
         batch_sz = batch_tensor.size(0)

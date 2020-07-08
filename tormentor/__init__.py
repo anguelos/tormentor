@@ -12,10 +12,10 @@ General design principles:
 """
 
 from .random import Uniform, Bernoulli, Distribution, Categorical
-from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation
+from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
 from .spatial_augmentations import *
 from .channel_augmentations import *
-from .augmented_dataset import ImageAugmentationPipelineDataset
+from .augmented_dataset import AugmentedDs, AugmentedCocoDs
 from .wrap import WrapAugmentation, ShredAugmentation
 from .augmented_dataset import AugmentationDataset, ImageAugmentationPipelineDataset
 from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
@@ -45,6 +45,7 @@ __all__ = [
     "Bernoulli",
     "Distribution",
     "Categorical",
+    "AugmentationChoice",
     "Scale",
     "Rotate",
     "DeterministicImageAugmentation",
@@ -52,7 +53,8 @@ __all__ = [
     "ChannelImageAugmentation",
     "ImageAugmentationPipelineDataset",
     "WrapAugmentation",
-    "AugmentationDataset",
+    "AugmentedDs",
+    "AugmentedCocoDs",
     "ImageAugmentationPipelineDataset",
     "reset_all_seeds",
     "ConstantBackground",
