@@ -12,7 +12,7 @@ intermediary_cls = base_cls.__subclasses__()
 augmentations_cls_list = []
 
 
-for cls in [tormentor.SpatialImageAugmentation, tormentor.ChannelImageAugmentation]:
+for cls in [tormentor.SpatialImageAugmentation, tormentor.StaticImageAugmentation]:
     augmentations_cls_list += cls.__subclasses__()
 
 

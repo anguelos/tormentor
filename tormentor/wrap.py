@@ -4,28 +4,27 @@ from diamond_square import functional_diamond_square
 import torch
 
 
-class WrapAugmentation(SpatialImageAugmentation):
-    pixel_scale = Uniform(value_range=(.0, .2))
-    pixel_scale_hwratio = Uniform(value_range=(10., 10.))
-    roughness = Uniform(value_range=(.3, .8))
+class Wrap(SpatialImageAugmentation):
+    roughness = Uniform(value_range=(.1, .7))
 
     def generate_batch_state(self, sampling_tensors:SamplingField)->SpatialAugmentationState:
-        batch_sz, width, height = sampling_tensors[0].size()
-        pixel_scales = type(self).pixel_scale(batch_sz, device=sampling_tensors[0].device)
-        pixel_scale_hwratios = type(self).pixel_scale_hwratio(batch_sz, device=sampling_tensors[0].device)
+        batch_sz, height, width = sampling_tensors[0].size()
         roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
-        plasma_sz = (batch_sz, 1, width, height)
+        plasma_sz = (batch_sz, 1, height, width)
         plasma_x = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)-.5
         plasma_y = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)-.5
-        return plasma_x, plasma_y, pixel_scales, pixel_scale_hwratios
+        plasma_dx = plasma_x[:,:,:,1:] - plasma_x[:,:,:,:-1]
+        plasma_dy = plasma_y[:,:,1:,:] - plasma_y[:,:,:-1,:]
+        plasma_scale_x = max(abs(plasma_dx.view(batch_sz,-1).min(dim=1)[0]), plasma_dx.view(batch_sz, -1).max(dim=1)[0])
+        plasma_scale_y = max(abs(plasma_dy.view(batch_sz,-1).min(dim=1)[0]), plasma_dy.view(batch_sz, -1).max(dim=1)[0])
+        plasma_x /= (plasma_scale_x.view(-1,1,1)*.25 * width)
+        plasma_y /= (plasma_scale_y.view(-1,1,1)*.25 * height)
+        return plasma_x, plasma_y
 
     @staticmethod
-    def functional_sampling_field(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor, pixel_scales:torch.FloatTensor, pixel_scale_hwratios:torch.FloatTensor)->SamplingField:
-        pixel_scales = pixel_scales.view(-1, 1, 1)
+    def functional_sampling_field(sampling_field:SamplingField, plasma_x:torch.FloatTensor, plasma_y:torch.FloatTensor)->SamplingField:
         field_x, field_y = sampling_field
-        h_pixel_scales = pixel_scales * (1 / pixel_scale_hwratios)
-        v_pixel_scales = pixel_scales * pixel_scale_hwratios
-        return field_x + plasma_x[:, 0, :, :] * h_pixel_scales, field_y + plasma_y[:, 0, :, :] * v_pixel_scales
+        return field_x + plasma_x[:, 0, :, :], field_y + plasma_y[:, 0, :, :]
 
 
 class ShredAugmentation(SpatialImageAugmentation):

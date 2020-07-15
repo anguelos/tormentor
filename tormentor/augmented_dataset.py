@@ -3,8 +3,9 @@ import numbers
 from matplotlib import pyplot as plt
 import torch
 import numpy as np
-
-from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugmentation, ChannelImageAugmentation
+import itertools
+import time
+from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugmentation, StaticImageAugmentation
 from typing import Type
 
 
@@ -36,86 +37,170 @@ class AugmentedDs(torch.utils.data.Dataset):
     def __getitem__(self, item):
         return self.augment_sample(*self.ds[item])
 
-    def __len__(self, item):
-        return len(self.coco_ds)
+    def __len__(self):
+        return len(self.ds)
 
 
 class AugmentedCocoDs(AugmentedDs):
-    def __init__(self, ds, exemplar_augmentation:Type[DeterministicImageAugmentation]):
-        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=False)
+    def __init__(self, ds, exemplar_augmentation:Type[DeterministicImageAugmentation], device="cpu", add_mask=False):
+        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask)
+        self.device = device
+
+    @staticmethod
+    def rle2mask(rle_counts, size):
+        mask_vector = torch.tensor(list(itertools.chain.from_iterable((((n) % 2,)*l for n, l in enumerate(rle_counts)))))
+        mask = mask_vector.view(size[1], size[0])
+        mask = mask.transpose(0, 1).unsqueeze(dim=0).unsqueeze(dim=0)
+        return mask
+
+    @staticmethod
+    def mask2rle(mask):
+        mask_vector = (mask[0, 0, :, :] > 0.5).transpose(0, 1).reshape(-1)
+        change = torch.empty_like(mask_vector)
+        change[0] = False
+        change[1:] = mask_vector[1:] != mask_vector[:-1]
+        dense_change = torch.arange(change.size(0))[change]
+        rle = torch.empty_like(dense_change)
+        rle[0] = dense_change[0]
+        rle[1:] = dense_change[1:] - dense_change[:-1]
+        rle = rle.tolist()
+        rle.append(mask_vector.size(0) - dense_change[-1])
+        size = [mask.size(2), mask.size(3)]
+        return rle, size
 
     def augment_sample(self, input, target, augmentation=None):
         if augmentation is None:
             augmentation = self.new_augmentation()
-        input = input.unsqueeze(dim=0) # making a batch from an image
         point_cloud_x=[]
         point_cloud_y=[]
-        segmentation_to_object = []
-        for n, coco_object in enumerate(target):
-            for surface_n in range(len(coco_object["segmentation"])):
-                X = torch.tensor(coco_object["segmentation"][surface_n])[::2]
-                Y = torch.tensor(coco_object["segmentation"][surface_n])[1::2]
-                point_cloud_x.append(X)
-                point_cloud_y.append(Y)
-                segmentation_to_object.append(n)
-        point_tensor_x = torch.zeros([1, len(point_cloud_x), max([len(x) for x in point_cloud_x])])
-        point_tensor_y = torch.zeros_like(point_tensor_x)
-        for n in range(len(point_cloud_x)):
-            point_tensor_x[0, n, :len(point_cloud_x[n])]=point_cloud_x[n]
-            point_tensor_y[0, n, :len(point_cloud_y[n])]=point_cloud_y[n]
-
-        # If COCO provide matrices .... these would be the only 2 lines.
-        out_image = augmentation(input)
-        point_tensor_x, point_tensor_y = augmentation.forward_point_cloud((point_tensor_x, point_tensor_y), input)
-        print("DBG 77",point_tensor_x.size())
-
-        new_target = []
+        n = 0
+        object_start_end_pos = []
+        mask_images = []
         for object_n, coco_object in enumerate(target):
-            coco_object = {k:v for k, v in coco_object.items()} # shallow copy
-            segmentation = []
-            for segm_id in [n for n in range(len(segmentation_to_object)) if segmentation_to_object[n]==object_n]:
-                print(point_tensor_x.size(), point_tensor_y.size())
-                obj_x=point_tensor_x[0,segm_id,:len(point_cloud_x[segm_id])].view([-1,1])
-                obj_y=point_tensor_y[0,segm_id,:len(point_cloud_x[segm_id])].view([-1,1])
-                segm_xy=torch.cat([obj_x,obj_y], dim=1)
-                segmentation.append(segm_xy.view(-1).tolist())
-            coco_object["segmentation"] = segmentation
-            all_object_x=torch.tensor([item for sublist in segmentation for item in sublist])[::2]
-            all_object_y=torch.tensor([item for sublist in segmentation for item in sublist])[1::2]
-            left=all_object_x.min().item()
-            right=all_object_x.max().item()
-            top=all_object_y.min().item()
-            bottom=all_object_y.max().item()
-            coco_object["bbox"] = [left, top, right-left, bottom-top]
-            new_target.append(coco_object)
-        return out_image[0, :, :, :], new_target
+            if coco_object["iscrowd"]:
+                object_start_end_pos.append(None)
+                mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"], coco_object["segmentation"]["size"])
+                mask_images.append(mask.to(self.device))
+            else:
+                object_surfaces = []
+                for surface_n in range(len(coco_object["segmentation"])):
+                    start_pos = n
+                    X = torch.Tensor(coco_object["segmentation"][surface_n])[::2]
+                    Y = torch.Tensor(coco_object["segmentation"][surface_n])[1::2]
+                    point_cloud_x += X.tolist()
+                    point_cloud_y += Y.tolist()
+                    n += X.size(0)
+                    end_pos = n
+                    object_surfaces.append((start_pos, end_pos))
+                object_start_end_pos.append(object_surfaces)
+        if self.add_mask:
+            mask_images.append(torch.ones([1, 1, input.size(-2), input.size(-1)], device=self.device))
+        pc = (torch.tensor(point_cloud_x, device=self.device), torch.tensor(point_cloud_y, device=self.device))
+        img = input.to(self.device)  # making a batch from an image
+        aug_pc, aug_img = augmentation(pc, img)
+        if len(mask_images):
+            aug_masks = augmentation(torch.cat(mask_images, dim=1).float())
+        X, Y = aug_pc
+        aug_target = []
+        current_mask = 0
+        for object_n, surface_start_end_pos in enumerate(object_start_end_pos):
+            if target[object_n]["iscrowd"]:
+                # TODO (anguelos) is there a more elegant way to get left, top, width, and height?
+                mask = aug_masks[:, current_mask: current_mask+1, :, :]
+                area = mask.size()
+                y = mask[0, 0, :, :].sum(dim=0) > 0
+                x = mask[0, 0, :, :].sum(dim=1) > 1
+                y = torch.where(y)[0]
+                x = torch.where(x)[0]
+                left = x.min()
+                right = x.max()
+                width = right - left
+                top = y.min()
+                bottom = y.max()
+                height = bottom - top
+                rle, size = AugmentedCocoDs.mask2rle(mask)
+                segmentation = {"counts": rle, "size": size}
+                current_mask += 1
+            else:
+                object_range = object_start_end_pos[object_n][0][0], object_start_end_pos[object_n][-1][1]
+                left = X[object_range[0]: object_range[1]].min().item()
+                right = X[object_range[0]: object_range[1]].max().item()
+                width = right - left
+                top = Y[object_range[0]: object_range[1]].min().item()
+                bottom = Y[object_range[0]: object_range[1]].max().item()
+                height = bottom - top
+                segmentation = []
+                for surface_n, (surface_start, surface_end) in enumerate(surface_start_end_pos):
+                    surf_X, surf_Y = X[surface_start:surface_end], Y[surface_start:surface_end]
+                    segmentation.append(torch.cat([surf_X.view(-1, 1), surf_Y.view(-1, 1)], dim=1).view(-1).tolist())
+                area = target[object_n]["area"]  # TODO (anguelos) recompute area with a polygon library
+            object = {"area": area,
+                      "iscrowd": target[object_n]["iscrowd"],
+                      "image_id": target[object_n]["image_id"],
+                      "category_id": target[object_n]["category_id"],
+                      "id": target[object_n]["id"],
+                      "segmentation": segmentation,
+                      "bbox": [left, top, width, height]}
+            aug_target.append(object)
+        if self.add_mask:
+            return aug_img, aug_target, aug_masks[:, aug_masks.size(1)-1:aug_masks.size(1), :, :]
+        else:
+            return aug_img, aug_target
 
     def show_augmentation(self, n, augmentation=None, save_filename=None):
         if augmentation is None:
             augmentation = self.new_augmentation()
         simple_input, simple_target = self.ds[n]
-        augmented_input, augmented_target = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
-        fig, (ax1, ax2) = plt.subplots(2,1)
-        ax1.imshow(simple_input.transpose(2,0).transpose(1,0))
-        ax2.imshow(augmented_input.transpose(2,0).transpose(1,0))
-        for coco_object in simple_target:
-            x=np.array(coco_object["segmentation"][0][::2])
-            y=np.array(coco_object["segmentation"][0][1::2])
-            #ax1.fill(x,y,alpha=.3)
-            ax1.plot(x,y)
-            l,t,w,h=coco_object["bbox"]
-            r, b = l+w, t+h
-            #ax1.plot([l,r,r,l,l],[t,t,b,b,t])
-            print(x,y)
-        for coco_object in augmented_target:
-            x=np.array(coco_object["segmentation"][0][::2])
-            y=np.array(coco_object["segmentation"][0][1::2])
-            print("->",x.astype("int32").tolist(),y.astype("int32").tolist())
-            ax2.plot(x,y)
-            l,t,w,h=coco_object["bbox"]
-            r, b = l+w, t+h
-            #ax2.plot([l,r,r,l,l],[t,t,b,b,t])
+        t = time.time()
+        if self.add_mask:
+            augmented_input, augmented_target, mask = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+            ax3.imshow(mask[0,0,:,:].cpu(), cmap="gray")
+            ax3.set_title(f"Mask")
+            ax3.set_xticks([])
+            ax3.set_xticks([], minor=True)
+            ax3.set_yticks([])
+            ax3 .set_yticks([], minor=True)
+        else:
+            augmented_input, augmented_target = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+        duration = time.time() - t
 
+        ax1.imshow(simple_input.cpu().transpose(2, 0).transpose(1, 0))
+        ax1.set_title(f"Input ({n})")
+        ax1.set_xticks([])
+        ax1.set_xticks([], minor=True)
+        ax1.set_yticks([])
+        ax1.set_yticks([], minor=True)
+        ax2.imshow(augmented_input.cpu().transpose(2, 0).transpose(1, 0))
+        ax2.set_title(f"Augmentation: {repr(augmentation)}.\nComputed in {duration:.4f} sec.")
+        ax2.set_xticks([])
+        ax2.set_xticks([], minor=True)
+        ax2.set_yticks([])
+        ax2.set_yticks([], minor=True)
+        for coco_object in simple_target:
+            if not coco_object["iscrowd"]:
+                x=np.array(coco_object["segmentation"][0][::2]+[coco_object["segmentation"][0][0]])
+                y=np.array(coco_object["segmentation"][0][1::2]+[coco_object["segmentation"][0][1]])
+                #ax1.fill(x,y,alpha=.3)
+                ax1.plot(x,y)
+                ax1.xaxis.set_ticks_position('none')
+                ax1.yaxis.set_ticks_position('none')
+                l,t,w,h=coco_object["bbox"]
+                r, b = l+w, t+h
+                #ax1.plot([l,r,r,l,l],[t,t,b,b,t])
+                #print(x,y)
+        for coco_object in augmented_target:
+            if not coco_object["iscrowd"]:
+                x=np.array(coco_object["segmentation"][0][::2]+[coco_object["segmentation"][0][0]])
+                y=np.array(coco_object["segmentation"][0][1::2]+[coco_object["segmentation"][0][1]])
+                #print("->",x.astype("int32").tolist(),y.astype("int32").tolist())
+                ax2.plot(x,y)
+                ax2.xaxis.set_ticks_position('none')
+                ax2.yaxis.set_ticks_position('none')
+                l,t,w,h=coco_object["bbox"]
+                r, b = l+w, t+h
+                #ax2.plot([l,r,r,l,l],[t,t,b,b,t])
         if save_filename is None:
             plt.show()
         else:
@@ -136,7 +221,7 @@ def _get_augmentation_subjects_from_dataset(dataset, where, augmentation):
                 else:
                     apply_on.append(False)
             return tuple(apply_on)
-        elif isinstance(augmentation, ChannelImageAugmentation):
+        elif isinstance(augmentation, StaticImageAugmentation):
             # channel augmentations are only applicable on the input image
             return (True,) + (False,) * (len(dataset[0]) - 1)
 
