@@ -21,9 +21,9 @@ class RR2013Ch2():
         return symbol_map
 
     def __init__(self, train=True, return_char_gt=False, return_mask=True,
-                 max_pixels=500000,
-                 default_width=640,
-                 default_height=640,
+                 reduce_img_size=True,
+                 default_width=512+64,
+                 default_height=512-64,
                  cache_ds=True,
                  input_transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])]),
                  gt_transform = torchvision.transforms.Compose([torchvision.transforms.Grayscale(), torchvision.transforms.ToTensor(), lambda x : (x<.99).float()]),
@@ -32,9 +32,11 @@ class RR2013Ch2():
                  train_gt_fname="Challenge2_Training_Task2_GT.zip",
                  test_input_fname="Challenge2_Test_Task12_Images.zip",
                  test_gt_fname="Challenge2_Test_Task2_GT.zip"):
+        self.train = train
+        self.reduce_img_size = reduce_img_size
         if train:
-            input_fname=train_input_fname
-            gt_fname=train_gt_fname
+            input_fname = train_input_fname
+            gt_fname = train_gt_fname
         else:
             input_fname=test_input_fname
             gt_fname=test_gt_fname
@@ -52,7 +54,6 @@ class RR2013Ch2():
         self.return_char_gt = return_char_gt
         self.return_mask = return_mask
         self.train = train
-        self.max_pixels=max_pixels
         self.default_width=default_width
         self.default_height=default_height
         self.cache_ds=cache_ds
@@ -130,24 +131,42 @@ class RR2013Ch2():
         return results
 
     def reduce_size(self, sample_list):
-        #old_width = sample_list[0].size(-2)
-        #old_height = sample_list[0].size(-1)
+        old_width = sample_list[0].size(-1)
+        old_height = sample_list[0].size(-2)
 
-        old_width = (sample_list[0].size(-2)//2)*2
-        old_height = (sample_list[0].size(-1)//2)*2
-        sample_list=[s[:,:old_width, :old_height] for s in sample_list]
+        #old_width = (sample_list[0].size(-1)//2)*2
+        #old_height = (sample_list[0].size(-2)//2)*2
+        #sample_list=[s[:,:old_width, :old_height] for s in sample_list]
 
-        if old_height*old_width <= self.max_pixels:
+        #if old_height*old_width <= self.max_pixels:
+        #    return sample_list
+        #new_width = min(old_width-10, self.default_width)
+        #new_height = min(old_height-10, self.default_height)
+
+        new_width = self.default_width
+        new_height = self.default_height
+
+        if old_height < new_height:
+            #print("Old height:",old_width, end="")
+            v_pad = (1+new_height-old_height)//2
+            sample_list=[torch.nn.functional.pad(input=s.unsqueeze(dim=0), pad=(0, 0, v_pad, v_pad), mode='constant', value=1)[0,:,:,:] for s in sample_list]
+            old_height = sample_list[0].size(-2)
+            #print(" -> ", old_height, sample_list[0].size())
+        if old_width < new_width :
+            #print("Old width:",old_width, end="")
+            h_pad = (1+new_width-old_width)//2
+            sample_list=[torch.nn.functional.pad(input=s.unsqueeze(dim=0), pad=(h_pad, h_pad, 0, 0), mode='constant', value=1)[0,:,:,:] for s in sample_list]
+            old_width = sample_list[0].size(-1)
+            #print(" -> ", old_width, sample_list[0].size())
+        #print(old_width, old_height)
+        if not self.reduce_img_size:
             return sample_list
-        new_width = min(old_width-10, self.default_width)
-        new_height = min(old_height-10, self.default_height)
-        left = np.random.randint(0, old_width-new_width)
-        top = np.random.randint(0, old_height-new_height)
-        results = [r[:,left:left+new_width, top:top+new_height] for r in sample_list]
+        left = np.random.randint(0, 1+old_width-new_width)
+        top = np.random.randint(0, 1+old_height-new_height)
+        results = [r[:, top:top+new_height,left:left+new_width] for r in sample_list]
         return results
 
     def __getitem__(self, item):
-
         if self.cache_ds:
             results=self.cache.get(item, None)
             if results is None:

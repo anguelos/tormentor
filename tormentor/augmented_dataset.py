@@ -26,7 +26,7 @@ class AugmentedDs(torch.utils.data.Dataset):
         height = input.size(-1)
         augmentated_data= []
         if self.add_mask:
-            args.append(torch.ones_like(input[:1,:,:]))
+            args.append(torch.ones_like(input[:1, :, :]).long())
         for datum in args:
             if isinstance(datum, torch.Tensor) and datum.size(-2) == width and datum.size(-1) == height:
                 augmentated_data.append(augmentation(datum))
@@ -42,7 +42,7 @@ class AugmentedDs(torch.utils.data.Dataset):
 
 
 class AugmentedCocoDs(AugmentedDs):
-    def __init__(self, ds, exemplar_augmentation:Type[DeterministicImageAugmentation], device="cpu", add_mask=False):
+    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], device="cpu", add_mask=False):
         super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask)
         self.device = device
 
@@ -75,12 +75,12 @@ class AugmentedCocoDs(AugmentedDs):
         point_cloud_y=[]
         n = 0
         object_start_end_pos = []
-        mask_images = []
+        obj_mask_images = []
         for object_n, coco_object in enumerate(target):
             if coco_object["iscrowd"]:
                 object_start_end_pos.append(None)
                 mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"], coco_object["segmentation"]["size"])
-                mask_images.append(mask.to(self.device))
+                obj_mask_images.append(mask.to(self.device))
             else:
                 object_surfaces = []
                 for surface_n in range(len(coco_object["segmentation"])):
@@ -93,20 +93,25 @@ class AugmentedCocoDs(AugmentedDs):
                     end_pos = n
                     object_surfaces.append((start_pos, end_pos))
                 object_start_end_pos.append(object_surfaces)
-        if self.add_mask:
-            mask_images.append(torch.ones([1, 1, input.size(-2), input.size(-1)], device=self.device))
+        #if self.add_mask:
+        #    mask_images.append(torch.ones([1, 1, input.size(-2), input.size(-1)], device=self.device))
         pc = (torch.tensor(point_cloud_x, device=self.device), torch.tensor(point_cloud_y, device=self.device))
         img = input.to(self.device)  # making a batch from an image
         aug_pc, aug_img = augmentation(pc, img)
-        if len(mask_images):
-            aug_masks = augmentation(torch.cat(mask_images, dim=1).float())
+        if len(obj_mask_images):
+            obj_mask_images = torch.cat(obj_mask_images, dim=1).float()
+            aug_obj_masks = augmentation(obj_mask_images)
+        if self.add_mask:
+            mask = torch.ones([input.size(-2), input.size(-1)]).long()
+            mask = augmentation(mask)
+
         X, Y = aug_pc
         aug_target = []
         current_mask = 0
         for object_n, surface_start_end_pos in enumerate(object_start_end_pos):
             if target[object_n]["iscrowd"]:
                 # TODO (anguelos) is there a more elegant way to get left, top, width, and height?
-                mask = aug_masks[:, current_mask: current_mask+1, :, :]
+                mask = aug_obj_masks[:, current_mask: current_mask+1, :, :]
                 area = mask.size()
                 y = mask[0, 0, :, :].sum(dim=0) > 0
                 x = mask[0, 0, :, :].sum(dim=1) > 1
@@ -143,7 +148,7 @@ class AugmentedCocoDs(AugmentedDs):
                       "bbox": [left, top, width, height]}
             aug_target.append(object)
         if self.add_mask:
-            return aug_img, aug_target, aug_masks[:, aug_masks.size(1)-1:aug_masks.size(1), :, :]
+            return aug_img, aug_target, mask
         else:
             return aug_img, aug_target
 
@@ -155,7 +160,7 @@ class AugmentedCocoDs(AugmentedDs):
         if self.add_mask:
             augmented_input, augmented_target, mask = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-            ax3.imshow(mask[0,0,:,:].cpu(), cmap="gray")
+            ax3.imshow(mask[:,:].cpu(), cmap="gray")
             ax3.set_title(f"Mask")
             ax3.set_xticks([])
             ax3.set_xticks([], minor=True)
@@ -198,7 +203,7 @@ class AugmentedCocoDs(AugmentedDs):
                 ax2.plot(x,y)
                 ax2.xaxis.set_ticks_position('none')
                 ax2.yaxis.set_ticks_position('none')
-                l,t,w,h=coco_object["bbox"]
+                l, t ,w ,h =coco_object["bbox"]
                 r, b = l+w, t+h
                 #ax2.plot([l,r,r,l,l],[t,t,b,b,t])
         if save_filename is None:
