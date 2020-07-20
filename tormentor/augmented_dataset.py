@@ -1,12 +1,13 @@
-import types
-import numbers
-from matplotlib import pyplot as plt
-import torch
-import numpy as np
 import itertools
+import numbers
 import time
-from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugmentation, StaticImageAugmentation
+import types
 from typing import Type
+import torch
+from matplotlib import pyplot as plt
+
+
+from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugmentation, StaticImageAugmentation
 
 
 class AugmentedDs(torch.utils.data.Dataset):
@@ -21,12 +22,12 @@ class AugmentedDs(torch.utils.data.Dataset):
     def augment_sample(self, *args, augmentation=None):
         if augmentation is None:
             augmentation = self.new_augmentation()
-        input = args[0]
-        width = input.size(-2)
-        height = input.size(-1)
-        augmentated_data= []
+        input_img = args[0]
+        width = input_img.size(-2)
+        height = input_img.size(-1)
+        augmentated_data = []
         if self.add_mask:
-            args.append(torch.ones_like(input[:1, :, :]).long())
+            args.append(torch.ones_like(input_img[:1, :, :]).long())
         for datum in args:
             if isinstance(datum, torch.Tensor) and datum.size(-2) == width and datum.size(-1) == height:
                 augmentated_data.append(augmentation(datum))
@@ -48,7 +49,8 @@ class AugmentedCocoDs(AugmentedDs):
 
     @staticmethod
     def rle2mask(rle_counts, size):
-        mask_vector = torch.tensor(list(itertools.chain.from_iterable((((n) % 2,)*l for n, l in enumerate(rle_counts)))))
+        mask_vector = torch.tensor(
+            list(itertools.chain.from_iterable((((n) % 2,) * l for n, l in enumerate(rle_counts)))))
         mask = mask_vector.view(size[1], size[0])
         mask = mask.transpose(0, 1).unsqueeze(dim=0).unsqueeze(dim=0)
         return mask
@@ -71,15 +73,16 @@ class AugmentedCocoDs(AugmentedDs):
     def augment_sample(self, input, target, augmentation=None):
         if augmentation is None:
             augmentation = self.new_augmentation()
-        point_cloud_x=[]
-        point_cloud_y=[]
+        point_cloud_x = []
+        point_cloud_y = []
         n = 0
         object_start_end_pos = []
         obj_mask_images = []
         for object_n, coco_object in enumerate(target):
             if coco_object["iscrowd"]:
                 object_start_end_pos.append(None)
-                mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"], coco_object["segmentation"]["size"])
+                mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"],
+                                                coco_object["segmentation"]["size"])
                 obj_mask_images.append(mask.to(self.device))
             else:
                 object_surfaces = []
@@ -93,17 +96,20 @@ class AugmentedCocoDs(AugmentedDs):
                     end_pos = n
                     object_surfaces.append((start_pos, end_pos))
                 object_start_end_pos.append(object_surfaces)
-        #if self.add_mask:
+        # if self.add_mask:
         #    mask_images.append(torch.ones([1, 1, input.size(-2), input.size(-1)], device=self.device))
         pc = (torch.tensor(point_cloud_x, device=self.device), torch.tensor(point_cloud_y, device=self.device))
-        img = input.to(self.device)  # making a batch from an image
-        aug_pc, aug_img = augmentation(pc, img)
+        input = input.to(self.device)  # making a batch from an image
+        aug_pc, aug_img = augmentation(pc, input)
         if len(obj_mask_images):
             obj_mask_images = torch.cat(obj_mask_images, dim=1).float()
             aug_obj_masks = augmentation(obj_mask_images)
         if self.add_mask:
-            mask = torch.ones([input.size(-2), input.size(-1)]).long()
-            mask = augmentation(mask)
+            mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            mask = augmentation(mask, is_mask=True)
+        print("pc:",pc[0].size())
+        print("input:",input.size())
+        print("aug_img:", aug_img.size())
 
         X, Y = aug_pc
         aug_target = []
@@ -111,10 +117,10 @@ class AugmentedCocoDs(AugmentedDs):
         for object_n, surface_start_end_pos in enumerate(object_start_end_pos):
             if target[object_n]["iscrowd"]:
                 # TODO (anguelos) is there a more elegant way to get left, top, width, and height?
-                mask = aug_obj_masks[:, current_mask: current_mask+1, :, :]
-                area = mask.size()
-                y = mask[0, 0, :, :].sum(dim=0) > 0
-                x = mask[0, 0, :, :].sum(dim=1) > 1
+                obj_mask = aug_obj_masks[:, current_mask: current_mask + 1, :, :]
+                area = obj_mask.size()
+                y = obj_mask[0, 0, :, :].sum(dim=0) > 0
+                x = obj_mask[0, 0, :, :].sum(dim=1) > 1
                 y = torch.where(y)[0]
                 x = torch.where(x)[0]
                 left = x.min()
@@ -123,7 +129,7 @@ class AugmentedCocoDs(AugmentedDs):
                 top = y.min()
                 bottom = y.max()
                 height = bottom - top
-                rle, size = AugmentedCocoDs.mask2rle(mask)
+                rle, size = AugmentedCocoDs.mask2rle(obj_mask)
                 segmentation = {"counts": rle, "size": size}
                 current_mask += 1
             else:
@@ -158,16 +164,18 @@ class AugmentedCocoDs(AugmentedDs):
         simple_input, simple_target = self.ds[n]
         t = time.time()
         if self.add_mask:
-            augmented_input, augmented_target, mask = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
+            augmented_input, augmented_target, mask = self.augment_sample(simple_input, simple_target,
+                                                                          augmentation=augmentation)
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-            ax3.imshow(mask[:,:].cpu(), cmap="gray")
+            ax3.imshow(mask[0, :, :].cpu(), cmap="gray")
             ax3.set_title(f"Mask")
             ax3.set_xticks([])
             ax3.set_xticks([], minor=True)
             ax3.set_yticks([])
-            ax3 .set_yticks([], minor=True)
+            ax3.set_yticks([], minor=True)
         else:
-            augmented_input, augmented_target = self.augment_sample(simple_input, simple_target, augmentation=augmentation)
+            augmented_input, augmented_target = self.augment_sample(simple_input, simple_target,
+                                                                    augmentation=augmentation)
             fig, (ax1, ax2) = plt.subplots(1, 2)
         duration = time.time() - t
 
@@ -185,27 +193,22 @@ class AugmentedCocoDs(AugmentedDs):
         ax2.set_yticks([], minor=True)
         for coco_object in simple_target:
             if not coco_object["iscrowd"]:
-                x=np.array(coco_object["segmentation"][0][::2]+[coco_object["segmentation"][0][0]])
-                y=np.array(coco_object["segmentation"][0][1::2]+[coco_object["segmentation"][0][1]])
-                #ax1.fill(x,y,alpha=.3)
-                ax1.plot(x,y)
+                x = torch.Tensor(coco_object["segmentation"][0][::2] + [coco_object["segmentation"][0][0]])
+                y = torch.Tensor(coco_object["segmentation"][0][1::2] + [coco_object["segmentation"][0][1]])
+                ax1.plot(x, y)
                 ax1.xaxis.set_ticks_position('none')
                 ax1.yaxis.set_ticks_position('none')
-                l,t,w,h=coco_object["bbox"]
-                r, b = l+w, t+h
-                #ax1.plot([l,r,r,l,l],[t,t,b,b,t])
-                #print(x,y)
+                l, t, w, h = coco_object["bbox"]
+                r, b = l + w, t + h
         for coco_object in augmented_target:
             if not coco_object["iscrowd"]:
-                x=np.array(coco_object["segmentation"][0][::2]+[coco_object["segmentation"][0][0]])
-                y=np.array(coco_object["segmentation"][0][1::2]+[coco_object["segmentation"][0][1]])
-                #print("->",x.astype("int32").tolist(),y.astype("int32").tolist())
-                ax2.plot(x,y)
+                x = torch.Tensor(coco_object["segmentation"][0][::2] + [coco_object["segmentation"][0][0]])
+                y = torch.Tensor(coco_object["segmentation"][0][1::2] + [coco_object["segmentation"][0][1]])
+                ax2.plot(x, y)
                 ax2.xaxis.set_ticks_position('none')
                 ax2.yaxis.set_ticks_position('none')
-                l, t ,w ,h =coco_object["bbox"]
-                r, b = l+w, t+h
-                #ax2.plot([l,r,r,l,l],[t,t,b,b,t])
+                l, t, w, h = coco_object["bbox"]
+                r, b = l + w, t + h
         if save_filename is None:
             plt.show()
         else:
@@ -247,10 +250,11 @@ def _get_augmentation_subjects_from_dataset(dataset, where, augmentation):
 
 
 class AugmentationDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, augmentation_factory, apply_on="guess",append_input_map=False):
+    def __init__(self, dataset, augmentation_factory, apply_on="guess", append_input_map=False):
         self.dataset = dataset
         self.augmentation_factory = augmentation_factory
-        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on, augmentation=augmentation_factory())
+        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on,
+                                                                augmentation=augmentation_factory())
         self.append_input_map = append_input_map
 
     def __len__(self):
@@ -297,7 +301,8 @@ class ImageAugmentationPipelineDataset(torch.utils.data.Dataset):
                 self.train = None
         else:
             self.train = train
-        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on, augmentation=augmentations[0]())
+        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on,
+                                                                augmentation=augmentations[0]())
         self.append_input_map = append_input_map
         if append_input_map:
             apply_on.append(True)
@@ -309,13 +314,13 @@ class ImageAugmentationPipelineDataset(torch.utils.data.Dataset):
         self.augmentation_factories = []
 
         for augmentation in augmentations:
-                if isinstance(augmentation, types.LambdaType):
-                    self.augmentation_factories.append(augmentation)
-                elif issubclass(augmentation, SpatialImageAugmentation):
-                    self.augmentation_factories.append(augmentation.factory())
-                else:
-                    raise ValueError(
-                        "augmentation must be either a DeterministicImageAugmentation or a lambda producing them.")
+            if isinstance(augmentation, types.LambdaType):
+                self.augmentation_factories.append(augmentation)
+            elif issubclass(augmentation, SpatialImageAugmentation):
+                self.augmentation_factories.append(augmentation.factory())
+            else:
+                raise ValueError(
+                    "augmentation must be either a DeterministicImageAugmentation or a lambda producing them.")
 
     def __len__(self):
         return len(self.dataset)

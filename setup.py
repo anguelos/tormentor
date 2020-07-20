@@ -1,40 +1,24 @@
-from setuptools import setup, find_packages
+#import setuptools
+from setuptools import setup, Extension
 
-requirements = [
-    'torch>=1.0.0',
-    'kornia>=0.2.0',
-]
-
-
-if __name__ == '__main__':
-    setup(
-        # Metadata
-        name="tormentor",
-        version="0.1.0",
-        author='Anguelos Nicolaou',
-        author_email='anguelos.nicolaou@gmail.com',
-        url='https://github.com/anguelos/tormentor',
-        description='Augmentation Framework for PyTorch',
-        long_description=open('README.md').read(),
-        license='Apache License 2.0',
-        python_requires='>=3.6',
-
-        # Test
-        setup_requires=['pytest-runner'],
-        tests_require=['pytest'],
-
-        # Package info
-        packages=find_packages(exclude=('test', 'examples',)),
-        zip_safe=True,
-        install_requires=requirements,
-            classifiers=[
-                'Intended Audience :: Developers',
-                'Intended Audience :: Education',
-                'Intended Audience :: Science/Research',
-                'Operating System :: POSIX :: Linux',
-                'Programming Language :: Python :: 3 :: Only',
-                'License :: OSI Approved :: Apache Software License',
-                'Topic :: Scientific/Engineering :: Image Recognition',
-                'Topic :: Software Development :: Libraries',
-             ],
-    )
+setup(
+    name='tormentor',
+    version='0.1.0',
+    packages=['tormentor', 'diamond_square'],
+    license='MIT',
+    author='Anguelos Nicolaou',
+    author_email='anguelos.nicolaou@gmail.com',
+    url='https://github.com/anguelos/tormentor',
+    description = "A very easy to use argument parser.",
+    long_description_content_type="text/markdown",
+    long_description=open('README.md').read(),
+    download_url = 'https://github.com/anguelos/fargv/archive/0.1.3.tar.gz',
+    keywords = ["pytorch", "augmentation", "kornia", "image segmentation", "computer vision"],
+    classifiers=[
+        "Intended Audience :: Science/Research",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Topic :: Scientific/Engineering"],
+    install_requires=["torch", "matplotlib", "torchvision"],
+)

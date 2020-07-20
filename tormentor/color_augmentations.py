@@ -4,7 +4,7 @@ from diamond_square import functional_diamond_square
 import kornia as K
 
 class ColorAugmentation(StaticImageAugmentation):
-    def forward_batch_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         state = self.generate_batch_state(batch_tensor)
         if batch_tensor.size(1) == 3: # Color operations require
             return type(self).functional_image(*((batch_tensor,) + state))
@@ -117,29 +117,24 @@ class PlasmaContrast(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch:torch.FloatTensor, contrast_map: torch.FloatTensor)->torch.FloatTensor:
-        #brightness = brightness.view(-1, 1, 1, 1)
-        return torch.clamp((batch -.5) * contrast_map + .5, 0, 1)
+        return torch.clamp((batch - .5) * contrast_map + .5, 0, 1)
 
 
-
-class PlasmaColorJitter(ColorAugmentation):
+class PlasmaShadow(ColorAugmentation):
     roughness = Uniform(value_range=(.1, .7))
+    shade_intencity = Uniform(value_range=(-1.0, .0))
+    shade_quantity = Uniform(value_range=(0.0, 1.0))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
+        shade_intencity = type(self).shade_intencity(batch_sz, device=batch_tensor.device).view(-1, 1, 1)
+        shade_quantity = type(self).shade_quantity(batch_sz, device=batch_tensor.device).view(-1, 1, 1)
         plasma_sz = (batch_sz, 1, height, width)
-        hue_map = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - .5
-        saturation_map = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) * 2
-        brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
-        contrast_map = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
-        return hue_map, saturation_map, brightness_map, contrast_map
+        shade_map = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
+        shade_map = (shade_map > shade_quantity).float() * shade_intencity
+        return shade_map,
 
     @classmethod
-    def functional_image(cls, batch:torch.FloatTensor, hue_map, saturation_map, brightness_map, contrast_map)->torch.FloatTensor:
-
-        #brightness = brightness.view(-1, 1, 1, 1)
-        batch = K.color.rgb_to_hsv(batch)
-        batch = (batch - .5) * contrast_map + .5
-        batch = batch + brightness_map
-        return torch.clamp(batch, 0, 1)
+    def functional_image(cls, batch:torch.FloatTensor, shade_map: torch.FloatTensor)->torch.FloatTensor:
+        return torch.clamp(batch + shade_map, 0, 1)
