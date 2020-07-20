@@ -2,7 +2,14 @@
 
 Image data augmentation for pytorch
 
-### How to run:
+### Instalation:
+
+Instaling current version with pip:
+```bash
+pip3 install --user --upgrade git+https://github.com/anguelos/tormentor
+```
+
+### Use Cases:
 * Augment sample:
 ```python
 import torch, tormentor
@@ -48,7 +55,7 @@ If the device is a GTX 980 Ti time is 0.1 sec. for larger images, the ratio grow
 * Change Augmentation Distributions:
 ```python
 import math, tormentor, torch, torchvision
-tile = lambda x: torchvision.transforms.ToPILImage()(torchvision.utils.make_grid(x.cpu(), n_rows=12))
+tile = lambda x: torchvision.transforms.ToPILImage()(torchvision.utils.make_grid(x.cpu(), nrow=12))
 generic_aug = tormentor.Rotate()
 RotateABit = tormentor.Rotate.override_distributions(radians = tormentor.Uniform((0., math.pi / 8))) 
 custom_aug = RotateABit()
@@ -57,12 +64,58 @@ tile(torch.cat([batch, generic_aug(batch), custom_aug(batch)], dim=0)).show()
 ```
 ![Rotation Example](rotation.png)
 
-### Instalation:
-
-Instaling current version with pip:
-```bash
-pip3 install --user --upgrade git+https://github.com/anguelos/tormentor
+* Random Augmentation Type:
+```python
+import math, tormentor, torch, torchvision
+tile = lambda x: torchvision.transforms.ToPILImage()(torchvision.utils.make_grid(x.cpu(), nrow=12))
+augmentation_types = [tormentor.Perspective, tormentor.Wrap, tormentor.PlasmaBrightness]
+CustomAugmentation = tormentor.AugmentationChoice.create(augmentation_types)
+aug = CustomAugmentation() 
+batch = torch.rand(24, 3, 64, 64, device="cuda")
+tile(aug(batch)).show()
+# checkup on determinism:
+tile(aug(batch)).show()
 ```
+![Rotation Example](choice.png)
+
+* Augmentation Cascade:
+```python
+import math, tormentor, torch, torchvision
+tile = lambda x: torchvision.transforms.ToPILImage()(torchvision.utils.make_grid(x.cpu(), nrow=12))
+augmentation_types = [tormentor.Perspective, tormentor.PlasmaBrightness]
+CustomAugmentation = tormentor.AugmentationCascade.create(augmentation_types)
+aug = CustomAugmentation() 
+batch = torch.rand(24, 3, 64, 64, device="cuda")
+tile(aug(batch)).show()
+```
+![Rotation Example](cascade.png)
+
+
+* Create Our Augmentation
+```python
+import tormentor
+
+class Quadratic(tormentor.SpatialImageAugmentation):
+    center_x = tormentor.Uniform((-.3, .3))
+    center_y = tormentor.Uniform((-.3, .3))
+
+    def generate_batch_state(self, sampling_tensors):
+        batch_sz = sampling_tensors[0].size(0)
+        center_x = type(self).center_x(batch_sz, device=sampling_tensors[0].device).view(-1)
+        center_y = type(self).center_y(batch_sz, device=sampling_tensors[0].device).view(-1)
+        return center_x, center_y
+
+    @classmethod
+    def functional_sampling_field(cls, sampling_field, center_x, center_y):
+        field_x, field_y = sampling_field
+        center_x = center_x.unsqueeze(dim=1).unsqueeze(dim=1)
+        center_y = center_y.unsqueeze(dim=1).unsqueeze(dim=1)
+        distance = (center_x - field_x)**2 + (center_y - field_y)**2
+        field_x, field_y = (field_x + field_x * distance ** 2) * .6, (field_y + field_y * distance ** 2) * .6
+        return field_x, field_y
+
+```
+![lence](lence.png)
 
 ### Design Principles
 
@@ -92,4 +145,4 @@ The method forward_sample_img samples from the random distributions aug_paramete
 * Determinism is strictly handled by BaseAugmentation and all augment_*** methods.
 * An augmentation must reside in a single device
 * All randomness must be coming from pytorch
-* Spatial augmentation samplingfields are normalised to -1, 1 so their effect magnitude is proporsional to image size (They are top down). 
+* Spatial augmentation samplingfields are normalised to -1, 1 so their effect magnitude is proporsional to image size (They are top down).
