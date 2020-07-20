@@ -81,9 +81,9 @@ class AugmentedCocoDs(AugmentedDs):
         for object_n, coco_object in enumerate(target):
             if coco_object["iscrowd"]:
                 object_start_end_pos.append(None)
-                mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"],
+                object_mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"],
                                                 coco_object["segmentation"]["size"])
-                obj_mask_images.append(mask.to(self.device))
+                obj_mask_images.append(object_mask.to(self.device))
             else:
                 object_surfaces = []
                 for surface_n in range(len(coco_object["segmentation"])):
@@ -105,9 +105,9 @@ class AugmentedCocoDs(AugmentedDs):
             obj_mask_images = torch.cat(obj_mask_images, dim=1).float()
             aug_obj_masks = augmentation(obj_mask_images)
         if self.add_mask:
-            mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
-            mask = augmentation(mask, is_mask=True)
-        print("pc:",pc[0].size())
+            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            augmented_created_mask = augmentation(created_mask, is_mask=True)
+        print("pc:", pc[0].size())
         print("input:",input.size())
         print("aug_img:", aug_img.size())
 
@@ -154,7 +154,7 @@ class AugmentedCocoDs(AugmentedDs):
                       "bbox": [left, top, width, height]}
             aug_target.append(object)
         if self.add_mask:
-            return aug_img, aug_target, mask
+            return aug_img, aug_target, augmented_created_mask
         else:
             return aug_img, aug_target
 

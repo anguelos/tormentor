@@ -101,7 +101,10 @@ class DeterministicImageAugmentation(object):
             torch.manual_seed(self.seed)
             n_dims = len(image_tensor.size())
             if n_dims == 3:
-                return self.forward_mask(image_tensor.unsqueeze(dim=0))[0, :, :]
+                print("Base augment_mask Start",image_tensor.sum())
+                res = self.forward_mask(image_tensor.unsqueeze(dim=0))[0, :, :]
+                print("Base augment_mask End",image_tensor.sum())
+                return res
             elif n_dims == 4:
                 return self.forward_mask(image_tensor)
             else:
@@ -472,7 +475,6 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         return type(self).functional_sampling_field(*((coords,) + state))
 
     def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
-        print("SpatialImageAugmentation.forward_mask")
         return self.forward_img(X)
 
 
@@ -485,7 +487,12 @@ class AugmentationCascade(DeterministicImageAugmentation):
         current_args = args
         for augmentation in self.augmentations:
             current_args = augmentation(*current_args, **kwargs)
-        return current_args
+            if not isinstance(current_args, tuple):
+                current_args = (current_args,)
+        if isinstance(current_args, tuple) and len(current_args) == 1:
+            return current_args[0]
+        else:
+            return current_args
 
     def augment_sampling_field(self, sf: SamplingField)->SamplingField:
         device = sf[0].device
