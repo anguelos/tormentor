@@ -107,9 +107,9 @@ class AugmentedCocoDs(AugmentedDs):
         if self.add_mask:
             created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
             augmented_created_mask = augmentation(created_mask, is_mask=True)
-        print("pc:", pc[0].size())
-        print("input:",input.size())
-        print("aug_img:", aug_img.size())
+        #print("pc:", pc[0].size())
+        #print("input:",input.size())
+        #print("aug_img:", aug_img.size())
 
         X, Y = aug_pc
         aug_target = []

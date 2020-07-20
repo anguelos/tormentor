@@ -101,9 +101,9 @@ class DeterministicImageAugmentation(object):
             torch.manual_seed(self.seed)
             n_dims = len(image_tensor.size())
             if n_dims == 3:
-                print("Base augment_mask Start",image_tensor.sum())
+                #print("Base augment_mask Start",image_tensor.sum())
                 res = self.forward_mask(image_tensor.unsqueeze(dim=0))[0, :, :]
-                print("Base augment_mask End",image_tensor.sum())
+                #print("Base augment_mask End",image_tensor.sum())
                 return res
             elif n_dims == 4:
                 return self.forward_mask(image_tensor)
@@ -157,28 +157,28 @@ class DeterministicImageAugmentation(object):
         Returns:
 
         """
-        print("__call__")
+        #print("__call__")
         # practiaclly method overloading
         # if I could only test objects for Typing Generics
         assert len(args) == 1 or len(args) == 2
         if len(args) == 2: # pointcloud and image tensor
-            print("__call__:pc")
+            #print("__call__:pc")
             pointcloud, image_tensor = args
             return self.augment_pointcloud(pointcloud, image_tensor, compute_img)
         elif isinstance(args[0], tuple): # sampling field
-            print("__call__:sf")
+            #print("__call__:sf")
             assert (2 <= len(args[0][0].size()) <= 3) and len(args[1].size()) == 2
             return self.augment_sampling_field(args[0])
         elif isinstance(args[0], torch.Tensor) and not is_mask: # image
-            print("__call__:img")
+            #print("__call__:img")
             assert 3 <= len(args[0].size()) <= 4
             return self.augment_image(args[0])
         elif isinstance(args[0], torch.Tensor) and is_mask:
-            print("__call__:mask")
+            #print("__call__:mask")
             assert 3 <= len(args[0].size()) <= 4
             return self.augment_mask(args[0])
         else:
-            print(args[0].dtype)
+            #print(args[0].dtype)
             raise ValueError
 
 
@@ -422,7 +422,7 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         raise NotImplementedError()
 
     def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
-        print("StaticImageAugmentation.forward_mask")
+        #print("StaticImageAugmentation.forward_mask")
         return X
 
     def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
@@ -432,14 +432,14 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         return bboxes
 
     def forward_pointcloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor, compute_img:bool)->PointCloud:
-        print("StaticImageAugmentation.forward_pointcloud",compute_img)
+        #print("StaticImageAugmentation.forward_pointcloud",compute_img)
         if compute_img:
             return pc, self.forward_img(batch_tensor)
         else:
             return pc, batch_tensor
 
     def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        print("StaticImageAugmentation.forward_img")
+        #print("StaticImageAugmentation.forward_img")
         state = self.generate_batch_state(batch_tensor)
         return type(self).functional_image(*((batch_tensor,) + state))
 
