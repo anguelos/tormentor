@@ -241,8 +241,11 @@ class DeterministicImageAugmentation(object):
 
 
     @classmethod
-    def get_distributions(cls):
-        return {k: v.copy() for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
+    def get_distributions(cls, copy=True):
+        if copy:
+            return {k: v.copy() for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
+        else:
+            return {k: v for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
 
     @classmethod
     def override_distributions(cls, requires_grad=False, **kwargs):

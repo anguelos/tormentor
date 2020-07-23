@@ -1,7 +1,5 @@
 import itertools
-import numbers
 import time
-import types
 from typing import Type
 import torch
 from matplotlib import pyplot as plt
@@ -11,10 +9,11 @@ from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugme
 
 
 class AugmentedDs(torch.utils.data.Dataset):
-    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], add_mask=False):
+    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], add_mask=False, device="cpu"):
         self.ds = ds
         self._exemplar_augmentation = exemplar_augmentation
         self.add_mask = add_mask
+        self.device = device
 
     def new_augmentation(self):
         return self._exemplar_augmentation.like_me()
@@ -26,13 +25,15 @@ class AugmentedDs(torch.utils.data.Dataset):
         width = input_img.size(-2)
         height = input_img.size(-1)
         augmentated_data = []
-        if self.add_mask:
-            args.append(torch.ones_like(input_img[:1, :, :]).long())
         for datum in args:
             if isinstance(datum, torch.Tensor) and datum.size(-2) == width and datum.size(-1) == height:
                 augmentated_data.append(augmentation(datum))
             else:
                 augmentated_data.append(datum)
+        if self.add_mask:
+            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            augmented_created_mask = augmentation(created_mask, is_mask=True)
+            augmentated_data.append(augmented_created_mask)
         return augmentated_data
 
     def __getitem__(self, item):
@@ -44,13 +45,12 @@ class AugmentedDs(torch.utils.data.Dataset):
 
 class AugmentedCocoDs(AugmentedDs):
     def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], device="cpu", add_mask=False):
-        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask)
-        self.device = device
+        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask, device=device)
 
     @staticmethod
     def rle2mask(rle_counts, size):
         mask_vector = torch.tensor(
-            list(itertools.chain.from_iterable((((n) % 2,) * l for n, l in enumerate(rle_counts)))))
+            list(itertools.chain.from_iterable(((n % 2,) * l for n, l in enumerate(rle_counts)))))
         mask = mask_vector.view(size[1], size[0])
         mask = mask.transpose(0, 1).unsqueeze(dim=0).unsqueeze(dim=0)
         return mask
@@ -96,8 +96,6 @@ class AugmentedCocoDs(AugmentedDs):
                     end_pos = n
                     object_surfaces.append((start_pos, end_pos))
                 object_start_end_pos.append(object_surfaces)
-        # if self.add_mask:
-        #    mask_images.append(torch.ones([1, 1, input.size(-2), input.size(-1)], device=self.device))
         pc = (torch.tensor(point_cloud_x, device=self.device), torch.tensor(point_cloud_y, device=self.device))
         input = input.to(self.device)  # making a batch from an image
         aug_pc, aug_img = augmentation(pc, input)
@@ -107,9 +105,6 @@ class AugmentedCocoDs(AugmentedDs):
         if self.add_mask:
             created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
             augmented_created_mask = augmentation(created_mask, is_mask=True)
-        #print("pc:", pc[0].size())
-        #print("input:",input.size())
-        #print("aug_img:", aug_img.size())
 
         X, Y = aug_pc
         aug_target = []
@@ -167,7 +162,7 @@ class AugmentedCocoDs(AugmentedDs):
             augmented_input, augmented_target, mask = self.augment_sample(simple_input, simple_target,
                                                                           augmentation=augmentation)
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-            ax3.imshow(mask[0, :, :].cpu(), cmap="gray")
+            ax3.imshow(mask[0, :, :].cpu(), cmap="gray",vmin=.0, vmax=1.)
             ax3.set_title(f"Mask")
             ax3.set_xticks([])
             ax3.set_xticks([], minor=True)
@@ -215,130 +210,36 @@ class AugmentedCocoDs(AugmentedDs):
             plt.savefig(save_filename)
 
 
-def _get_augmentation_subjects_from_dataset(dataset, where, augmentation):
-    """Guesses which images are image tensors.
-    """
-    sample = dataset[0]
-    if where is "guess":
-        if isinstance(augmentation, SpatialImageAugmentation):
-            width, height = sample[0].size()[-2:]
-            apply_on = []
-            for t in sample:
-                if isinstance(t, torch.Tensor) and len(t.size()) >= 2 and t.size(-2) == width and t.size(-1) == height:
-                    apply_on.append(True)
-                else:
-                    apply_on.append(False)
-            return tuple(apply_on)
-        elif isinstance(augmentation, StaticImageAugmentation):
-            # channel augmentations are only applicable on the input image
-            return (True,) + (False,) * (len(dataset[0]) - 1)
-
-    elif where == "all":
-        return (True,) * len(dataset[0])
-    elif where == "first" or where == 0:
-        return (True,) + (False,) * (len(dataset[0]) - 1)
-    elif where == "last" or where == -1:
-        return (True,) + (False,) * (len(dataset[0]) - 1)
-    elif isinstance(where, numbers.Integral):
-        res = [False] * len(dataset[0])
-        res[where] = True
-        return tuple(res)
-    elif isinstance(where, (list, tuple)):
-        return tuple(where)
+def labels2onehots(label_sample_tensor, n_classes:int, neutral_label:int):
+    if neutral_label >1:
+        label_sample_tensor = label_sample_tensor.copy().unsqueeze(dim=0)
+        height, width = label_sample_tensor
+        onehot = torch.zeros(n_classes + 2, height, width)
+        neutral_slice = label_sample_tensor == neutral_label
+        label_sample_tensor[neutral_slice] = 0
+        onehot.scatter_(dim=0,  index=label_sample_tensor.unsqueeze(dim=0), src=torch.ones(label_sample_tensor.size()).unsqueeze(dim=0))
+        return onehot
     else:
-        raise ValueError()
+        label_sample_tensor = label_sample_tensor.copy().unsqueeze(dim=0)
+        #onehot.scatter_(dim=0, index=label_sample_tensor.unsqueeze(dim=0), src=torch.ones(label_sample_tensor.size()).unsqueeze(dim=0))
+        height, width = label_sample_tensor
+        # based on https://discuss.pytorch.org/t/convert-int-into-one-hot-format/507/4
+        #y = torch.LongTensor(batch_size, 1).random_() % nb_digits
+        onehot = torch.zeros(n_classes + 2, height, width)
+        neutral_slice = label_sample_tensor == neutral_label
+        label_sample_tensor[neutral_slice] = 0
+        onehot.scatter_(dim=0,  index=label_sample_tensor.unsqueeze(dim=0), src=torch.ones(label_sample_tensor.size()).unsqueeze(dim=0))
+        return onehot
 
 
-class AugmentationDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, augmentation_factory, apply_on="guess", append_input_map=False):
-        self.dataset = dataset
-        self.augmentation_factory = augmentation_factory
-        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on,
-                                                                augmentation=augmentation_factory())
-        self.append_input_map = append_input_map
 
-    def __len__(self):
-        return len(self.dataset)
+class AugmentedVOCSegmentationDs(AugmentedDs):
+    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], device="cpu", add_mask=False,
+                 n_classes=20, neutral_label=255, zero_bias=.001):
+        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask)
+        self.device = device
+
 
     def __getitem__(self, item):
-        augmentation = self.augmentation_factory.create_persistent()
-        sample = self.dataset[item]
-        sample = tuple([augmentation(sample[n]) if self.apply_on[n] else sample[n] for n in range(len(sample))])
-        if self.append_input_map:
-            sample = sample + (augmentation(torch.ones_like(sample[0])),)
-        return sample
-
-
-class ImageAugmentationPipelineDataset(torch.utils.data.Dataset):
-    """Augments a pytorch dataset with some augmentations
-
-        A dataset is assumed to be an oredered collection of 4D tensors (images), tensors of other dimensions and
-        numbers float or integers. Images are assumed to be (Batch x Channels x Width x Height) and to always have the
-        batch dimension with a size of 1. For segmentation data to be properly augmented, pixel labels must be encoded
-        as one-hot encoding along the channel dimension.
-    """
-
-    def __init__(self, dataset, augmentations, apply_on="guess", occurrence_prob=1.0, append_input_map=False,
-                 train=None):
-        """Augments a pytorch dataset with some augmentations.
-
-        :param dataset: A pytorch dataset to be wrapped and augmented.
-        :param augmentations: One or more augmentation class or a factory generating instances of deterministic
-            augmetions to be applied on each sample.
-        :param apply_on: One of  ["all", "first", "last", "guess"] or a tuple or list of booleans. It describes on
-            witch elements of a sample to apply the augmentation on. Guessing is done on the the assumption that the
-            first item in a sample is an image (4D tensor) and the last two dimensions are width and height. All tensors
-            having the last two dimensions with this size are assumed to be tensors to be augmented.
-        :param occurrence_prob: The probability of augmenting the sample.
-        :param append_input_map: If True, the sample will be appended by an image of ones wich will then be passed in
-            the augmentation; after augmentation these images endout what is the contribution of the original image to
-            each pixel after the augmentation.
-        """
-        if train is None:
-            try:
-                self.train = dataset.train
-            except AttributeError:
-                self.train = None
-        else:
-            self.train = train
-        self.apply_on = _get_augmentation_subjects_from_dataset(dataset, where=apply_on,
-                                                                augmentation=augmentations[0]())
-        self.append_input_map = append_input_map
-        if append_input_map:
-            apply_on.append(True)
-        self.apply_on = apply_on
-        self.dataset = dataset
-        self.occurrence_prob = occurrence_prob
-        if not isinstance(augmentations, (list, tuple)):
-            augmentations = (augmentations,)
-        self.augmentation_factories = []
-
-        for augmentation in augmentations:
-            if isinstance(augmentation, types.LambdaType):
-                self.augmentation_factories.append(augmentation)
-            elif issubclass(augmentation, SpatialImageAugmentation):
-                self.augmentation_factories.append(augmentation.factory())
-            else:
-                raise ValueError(
-                    "augmentation must be either a DeterministicImageAugmentation or a lambda producing them.")
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, item):
-        sample = list(self.dataset[item])
-        if self.append_input_map:
-            sample.append(torch.ones_like(sample[0]))
-        if torch.rand(1).item() > self.occurrence_prob:
-            return sample
-        else:
-            augmentations = [f() for f in self.augmentation_factories]
-            augmented_sample = []
-            for should_apply, sample_tensor in zip(self.apply_on, sample):
-                if should_apply:
-                    for augmentation in augmentations:
-                        sample_tensor = augmentation(sample_tensor)
-                    augmented_sample.append(sample_tensor)
-                else:
-                    augmented_sample.append(sample_tensor)
-            return augmented_sample
+        input, segmentation = self.ds[item]
+        segmentation = (segmentation * 255).long()

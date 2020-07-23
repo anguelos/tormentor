@@ -2,28 +2,25 @@ r"""Segmentation aware image augmentations
 
 This module realises basic utilities for image augmentations.
 
-Augmentations are either spatial or
-
 General design principles:
-    - Images are always 4D tensors
+    - Images are always 3D tensors [CxHxW], batches are always 4D tensors [BxCxHxW]
     - Augmentations are always a applied on a single sample
     - The first dimension of the 4D tensor is always 1
 
 """
 
 from .random import Uniform, Bernoulli, Distribution, Categorical
-from .base_augmentation import ChannelImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
+from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
 from .spatial_augmentations import *
-from .channel_augmentations import *
+from .color_augmentations import *
 from .augmented_dataset import AugmentedDs, AugmentedCocoDs
-from .wrap import WrapAugmentation, ShredAugmentation
-from .augmented_dataset import AugmentationDataset, ImageAugmentationPipelineDataset
+from .wrap import Wrap, ShredAugmentation
 from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
-leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(ChannelImageAugmentation.__subclasses__())
+leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(StaticImageAugmentation.__subclasses__())
 
 all_factory_names = []
 all_augmentation_names = []
@@ -37,6 +34,8 @@ for aug in leaf_augmentations:
     all_augmentation_names.append(aug_name)
     all_factory_names.append(f"def Random{aug_name}")
 
+choice = AugmentationChoice.create
+cascade = AugmentationCascade.create
 
 __all__ = [
     "debug_pattern",
@@ -60,6 +59,8 @@ __all__ = [
     "ConstantBackground",
     "UniformNoiseBackground",
     "NormalNoiseBackground",
-    "PlasmaBackground"
-    "ShredAugmentation"
+    "PlasmaBackground",
+    "ShredAugmentation",
+    "choice",
+    "cascade"
 ] + all_augmentation_names + all_factory_names

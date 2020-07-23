@@ -95,25 +95,28 @@ tile(aug(batch)).show()
 ```python
 import tormentor
 
-class Quadratic(tormentor.SpatialImageAugmentation):
+class Lense(tormentor.SpatialImageAugmentation):
     center_x = tormentor.Uniform((-.3, .3))
     center_y = tormentor.Uniform((-.3, .3))
+    gamma = tormentor.Uniform((1., 1.))
 
     def generate_batch_state(self, sampling_tensors):
         batch_sz = sampling_tensors[0].size(0)
+        gamma = type(self).gamma(batch_sz, device=sampling_tensors[0].device).view(-1)
         center_x = type(self).center_x(batch_sz, device=sampling_tensors[0].device).view(-1)
         center_y = type(self).center_y(batch_sz, device=sampling_tensors[0].device).view(-1)
-        return center_x, center_y
+        return center_x, center_y, gamma
 
     @classmethod
-    def functional_sampling_field(cls, sampling_field, center_x, center_y):
+    def functional_sampling_field(cls, sampling_field, center_x, center_y, gamma):
         field_x, field_y = sampling_field
         center_x = center_x.unsqueeze(dim=1).unsqueeze(dim=1)
         center_y = center_y.unsqueeze(dim=1).unsqueeze(dim=1)
-        distance = (center_x - field_x)**2 + (center_y - field_y)**2
-        field_x, field_y = (field_x + field_x * distance ** 2) * .6, (field_y + field_y * distance ** 2) * .6
+        gamma = gamma.unsqueeze(dim=1).unsqueeze(dim=1)
+        distance = ((center_x - field_x)**2 + (center_y - field_y)**2) ** .5
+        #distance = 1/(1+distance)
+        field_x, field_y = (field_x + field_x * distance ** gamma) , (field_y + field_y * distance ** gamma) 
         return field_x, field_y
-
 ```
 ![lence](lence.png)
 

@@ -1,11 +1,11 @@
 import torch
 import PIL
 import kornia as K
-from PIL import Image, ImageDraw,ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 
-def render_text(text,font=None,fnt_path="", pad=10, font_size=32):
+def render_singleline_text(text,font=None,fnt_path="", pad=10, font_size=32):
     if font is None:
         font=ImageFont.truetype(fnt_path, font_size)
     else:
@@ -14,7 +14,7 @@ def render_text(text,font=None,fnt_path="", pad=10, font_size=32):
     (width, baseline), _ = font.font.getsize(text)
     blank_image = Image.new('RGBA', (width+2*pad, ascent+descent+2*pad), 'white')
     img_draw = ImageDraw.Draw(blank_image)
-    img_draw.text((pad, pad), text, fill='black',font=font)
+    img_draw.text((pad, pad), text, fill='black', font=font)
     return K.utils.image_to_tensor(np.array(blank_image))/255.0
 
 
