@@ -14,6 +14,7 @@ from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation
 from .spatial_augmentations import *
 from .color_augmentations import *
 from .augmented_dataset import AugmentedDs, AugmentedCocoDs
+from .augmented_dataloader import AugmentedDataLoader
 from .wrap import Wrap, ShredAugmentation
 from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern

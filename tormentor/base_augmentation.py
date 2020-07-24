@@ -14,6 +14,16 @@ PointCloudsImages = Tuple[PointCloudList, torch.FloatTensor]
 PointCloudOneOrMore = Union[PointCloudList, PointCloud]
 SpatialAugmentationState = Tuple[torch.Tensor, ...]
 
+# This is a work around probably wrong behavior of pytorch
+# A bug report has been submmited to pytorch
+# https://github.com/pytorch/pytorch/issues/41970
+if torch.cuda.device_count() == 0:
+    def random_fork(devices):
+        return torch.random.fork_rng()
+else:
+    def random_fork(devices):
+        return torch.random.fork_rng(devices=devices)
+
 
 class AugmentationLayer(torch.nn.Module):
     """Generates deterministic augmentations.
@@ -85,7 +95,8 @@ class DeterministicImageAugmentation(object):
 
     def augment_image(self, image_tensor: torch.FloatTensor):
         device = image_tensor.device
-        with torch.random.fork_rng(devices=(device,)):
+
+        with random_fork(devices=(device,)):
             torch.manual_seed(self.seed)
             n_dims = len(image_tensor.size())
             if n_dims == 3:
@@ -97,13 +108,11 @@ class DeterministicImageAugmentation(object):
 
     def augment_mask(self, image_tensor: torch.Tensor):
         device = image_tensor.device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             torch.manual_seed(self.seed)
             n_dims = len(image_tensor.size())
             if n_dims == 3:
-                #print("Base augment_mask Start",image_tensor.sum())
                 res = self.forward_mask(image_tensor.unsqueeze(dim=0))[0, :, :]
-                #print("Base augment_mask End",image_tensor.sum())
                 return res
             elif n_dims == 4:
                 return self.forward_mask(image_tensor)
@@ -113,7 +122,7 @@ class DeterministicImageAugmentation(object):
     def augment_sampling_field(self, sf: SamplingField):
         assert sf[0].size() == sf[1].size()
         device = sf[0].device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             torch.manual_seed(self.seed)
             n_dims = len(sf[0].size())
             if n_dims == 2:
@@ -130,7 +139,7 @@ class DeterministicImageAugmentation(object):
             device = pc[0][0].device
         else:
             device = pc[0].device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             torch.manual_seed(self.seed)
             if isinstance(pc, list):
                 assert len(image_tensor.size()) == 4
@@ -157,28 +166,22 @@ class DeterministicImageAugmentation(object):
         Returns:
 
         """
-        #print("__call__")
         # practiaclly method overloading
         # if I could only test objects for Typing Generics
         assert len(args) == 1 or len(args) == 2
         if len(args) == 2: # pointcloud and image tensor
-            #print("__call__:pc")
             pointcloud, image_tensor = args
             return self.augment_pointcloud(pointcloud, image_tensor, compute_img)
         elif isinstance(args[0], tuple): # sampling field
-            #print("__call__:sf")
             assert (2 <= len(args[0][0].size()) <= 3) and len(args[1].size()) == 2
             return self.augment_sampling_field(args[0])
         elif isinstance(args[0], torch.Tensor) and not is_mask: # image
-            #print("__call__:img")
             assert 3 <= len(args[0].size()) <= 4
             return self.augment_image(args[0])
         elif isinstance(args[0], torch.Tensor) and is_mask:
-            #print("__call__:mask")
             assert 3 <= len(args[0].size()) <= 4
             return self.augment_mask(args[0])
         else:
-            #print(args[0].dtype)
             raise ValueError
 
 
@@ -425,7 +428,6 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         raise NotImplementedError()
 
     def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
-        #print("StaticImageAugmentation.forward_mask")
         return X
 
     def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
@@ -435,14 +437,12 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         return bboxes
 
     def forward_pointcloud(self, pc: PointCloud, batch_tensor: torch.FloatTensor, compute_img:bool)->PointCloud:
-        #print("StaticImageAugmentation.forward_pointcloud",compute_img)
         if compute_img:
             return pc, self.forward_img(batch_tensor)
         else:
             return pc, batch_tensor
 
     def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        #print("StaticImageAugmentation.forward_img")
         state = self.generate_batch_state(batch_tensor)
         return type(self).functional_image(*((batch_tensor,) + state))
 
@@ -499,7 +499,7 @@ class AugmentationCascade(DeterministicImageAugmentation):
 
     def augment_sampling_field(self, sf: SamplingField)->SamplingField:
         device = sf[0].device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             for augmentation in self.augmentations:
                 torch.manual_seed(augmentation.seed)
                 sf = augmentation.forward_sampling_field(sf)
@@ -507,7 +507,7 @@ class AugmentationCascade(DeterministicImageAugmentation):
 
     def augment_image(self, image_tensor: torch.Tensor) -> torch.Tensor:
         device = image_tensor.device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             for augmentation in self.augmentations:
                 torch.manual_seed(augmentation.seed)
                 image_tensor = augmentation.forward_img(image_tensor)
@@ -515,7 +515,7 @@ class AugmentationCascade(DeterministicImageAugmentation):
 
     def augment_mask(self, image_tensor: torch.Tensor) -> torch.Tensor:
         device = image_tensor.device
-        with torch.random.fork_rng(devices=(device,)):
+        with random_fork(devices=(device,)):
             for augmentation in self.augmentations:
                 torch.manual_seed(augmentation.seed)
                 image_tensor = augmentation.forward_mask(image_tensor)
@@ -548,10 +548,10 @@ class AugmentationCascade(DeterministicImageAugmentation):
         return new_cls
 
     @classmethod
-    def get_distributions(cls):
+    def get_distributions(cls, copy: bool = True):
         res = {}
         for n, contained_augmentation in enumerate(cls.augmentation_list):
-            res.update({(n, k): v.copy() for k, v in contained_augmentation.get_distributions()})
+            res.update({f"{n}_{k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
         return res
 
 

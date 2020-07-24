@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-print("Importing fastai")
-import fastai
-print("Importing fastai.vision")
 import fastai.vision
-print("done")
+import tormentor
 
 import torch
 import fargv
 
-from unet import UNet
+
 from rr_ds import RR2013Ch2
-#from dagtasets import Dibco
-import lm_util
-import sys
+from dagtasets import Dibco
 import cv2
 import time
 import numpy as np
@@ -24,6 +19,7 @@ p={
     "log_freq": 10,
     "lr": .001,
     "epochs": 10,
+    "tormentor_device":"cpu",
     "device":"cuda",
     "val_device":"{device}",
     "validate_freq": 5,
@@ -62,14 +58,23 @@ def resume(net):
         return {},{},0, net
 
 
-def render_confusion(prediction,gt,tp_col=[0, 0, 0],tn_col=[255,255,255],fp_col=[255,0,0],fn_col=[0,0,255]):
+def render_confusion(prediction,gt,valid_mask=None,tp_col=[0, 0, 0],tn_col=[255,255,255],fp_col=[255,0,0],fn_col=[0,0,255], undetermined_col=[128,128,128]):
     prediction=(prediction.cpu().numpy())
     gt = (gt.cpu().numpy())
     res=np.zeros(prediction.shape+(3,))
-    tp = gt & prediction
-    tn = (~gt) & (~prediction)
-    fp = (~gt) & prediction
-    fn = (gt) & (~prediction)
+    if valid_mask is not None:
+        valid_mask = valid_mask.cpu().numpy()
+        tp = gt & prediction & valid_mask
+        tn = (~gt) & (~prediction) & valid_mask
+        fp = (~gt) & prediction & valid_mask
+        fn = (gt) & (~prediction) & valid_mask
+    else:
+        tp = gt & prediction
+        tn = (~gt) & (~prediction)
+        fp = (~gt) & prediction
+        fn = (gt) & (~prediction)
+        valid_mask = np.ones_like(gt)
+    res[~valid_mask, :] = undetermined_col
     res[tp, :] = tp_col
     res[tn, :] = tn_col
     res[fp, :] = fp_col
@@ -77,7 +82,7 @@ def render_confusion(prediction,gt,tp_col=[0, 0, 0],tn_col=[255,255,255],fp_col=
     precision = (1+tp.sum())/float(1+tp.sum()+fp.sum())
     recall = (1+tp.sum()) / float(1+tp.sum() + fn.sum())
     Fscore=(2*precision*recall)/(precision+recall)
-    return res,precision,recall,Fscore
+    return res, precision, recall, Fscore
 
 
 def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_deeplabv3=True):
@@ -102,6 +107,7 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
             input_img, gt, mask = input_img.to(device), gt.to(device), mask.to(device)
             coeffs = gt[:, 1, :, :].mean(dim=1).mean(dim=1)
             coeffs = coeffs.unsqueeze(dim=1).unsqueeze(dim=1).unsqueeze(dim=1)
+            #print("coefs.size()",coeffs.size(),"  mask.size()", mask.size())
             coeffs = coeffs * mask
             #coeffs=1
             if p.mode == "normal":
@@ -110,45 +116,19 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
                     out_dict = net(input_img)
                     prediction = out_dict["out"]
                     loss_mask = out_dict["aux"]
-                    loss = criterion(prediction, gt)*coeffs * loss_mask
+                    loss = criterion(prediction, gt)
+                    loss = loss*coeffs * loss_mask
                     prediction = torch.nn.functional.softmax(prediction, dim=1)
                     prediction = torch.cat([prediction,1-prediction],dim=1).detach()
                 else:
                     prediction = net(input_img)
-                    loss = criterion(prediction, gt)* coeffs
+                    #print("Predictions",prediction.size(),gt.size())
+                    loss = criterion(prediction, gt)
+                    #print("Losses",loss.size(),coeffs.size())
+                    loss = loss* coeffs
                     prediction = torch.nn.functional.softmax(prediction, dim=1)
                     prediction = torch.cat([prediction,1-prediction],dim=1).detach()
 
-            # elif p.mode == "residual":
-            #     prediction = net(input_img) + torch.log(input_img)
-            #     loss = criterion(prediction, gt)*coeffs
-            #     prediction = torch.nn.functional.softmax(prediction, dim=1)
-            #     prediction = torch.cat([prediction,1-prediction],dim=1).detach()
-            #
-            # elif p.mode == "chain":
-            #     prediction = net(input_img)
-            #     #loss = criterion(prediction, gt)*coeffs
-            #     prediction = torch.nn.functional.softmax(prediction, dim=1)
-            #     prediction = torch.cat([prediction[:,:1,:,:],1-prediction[:,:1,:,:]],dim=1)
-            #
-            #     prediction = net(prediction)
-            #     #loss = loss + criterion(prediction, gt).sum()*coeffs
-            #     loss = criterion(prediction, gt) * coeffs
-            #     prediction = torch.nn.functional.softmax(prediction, dim=1)
-            #     prediction = torch.cat([prediction,1-prediction],dim=1).detach()
-            #
-            # elif p.mode == "residual_chain":
-            #     prediction = net(input_img) + torch.log(input_img)
-            #     #loss = criterion(prediction, gt)*coeffs
-            #     prediction = torch.nn.functional.softmax(prediction, dim=1)
-            #     prediction = torch.cat([prediction[:,:1,:,:],1-prediction[:,:1,:,:]],dim=1)
-            #
-            #     prediction = net(prediction) + torch.log(prediction)
-            #     #loss = loss + criterion(prediction, gt)*coeffs
-            #     loss = criterion(prediction, gt) * coeffs
-            #
-            #     prediction = torch.nn.functional.softmax(prediction, dim=1)
-            #     prediction = torch.cat([prediction,1-prediction],dim=1).detach()
             else:
                 raise ValueError("unknown mode")
             loss=loss.sum()
@@ -158,7 +138,7 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
                 optimizer.zero_grad()
             #bin_prediction = prediction[0,0,:,:]<get_otsu_threshold(prediction[0,0,:,:])
             #confusion,precision,recall,fscore = render_confusion(bin_prediction, gt[0, 0, :, :]<.5)
-            confusion, precision, recall, fscore = render_confusion(prediction[0,0,:,:]<.5, gt[0, 0, :, :] < .5)
+            confusion, precision, recall, fscore = render_confusion(prediction[0,0,:,:]<.5, gt[0, 0, :, :] < .5, mask[0,0,:,:] > .5)
             #confusion,precision,recall,fscore = render_optimal_confusion(prediction[0,0,:,:], gt[0, 0, :, :]<.5)
 
             fscores.append(fscore)
@@ -168,7 +148,6 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
             if save_images:
                 cv2.imwrite("/tmp/{}_{}_img_{}.png".format(p.mode,isval_str,n), confusion)
                 model_outputs[n]=prediction.detach().cpu()
-    #lines = ["{} {}:\t{}".format(isval_str[0],n,fscores[n]) for n in range(len(fscores))]
     lines = []
     lines.append("Epoch {} {} Total:\t{:05f}%".format(epoch, isval_str, 100*sum(fscores)/len(fscores)))
     lines.append('')
@@ -180,17 +159,71 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
 
 
 
-trainset = RR2013Ch2(train=True, return_mask=True)
-testset = RR2013Ch2(train=False, return_mask=True, cache_ds=False)
+augmentation_cls=tormentor.cascade([tormentor.Wrap,tormentor.Perspective])
+
+trainset = RR2013Ch2(train=True, return_mask=True,cache_ds=True)
+
+
+def augment_RRDS_batch(batch, augmentation,process_device):
+    input_imgs, segmentations, masks = batch
+    if process_device != batch[0].device:
+        input_imgs=input_imgs.to(process_device)
+        segmentations=segmentations.to(process_device)
+        masks=masks.to(process_device)
+    with torch.no_grad():
+        input_imgs = augmentation(input_imgs)
+        segmentations = augmentation(segmentations, is_mask=True)
+        masks = augmentation(masks, is_mask=True)
+        segmentations = torch.clamp(segmentations[:,:1, :, :] + (1-masks),0.,1.0)
+        segmentations = torch.cat([segmentations, 1-segmentations], dim=1)
+        if process_device != batch[0].device:
+            return input_imgs.to(batch[0].device), segmentations.to(batch[0].device), masks.to(batch[0].device)
+        else:
+            return input_imgs, segmentations, masks
+
+
+def augment_RRDS_sample(sample, augmentation,process_device):
+    input_img, segmentation, mask = sample
+    if process_device != sample[0].device:
+        input_img=input_img.to(process_device)
+        segmentation=segmentation.to(process_device)
+        mask = mask.to(process_device)
+    with torch.no_grad():
+        input_img = augmentation(input_img)
+        segmentation = augmentation(segmentation, is_mask=True)
+        mask = augmentation(mask, is_mask=True)
+        segmentation = torch.clamp(segmentation[:1, :, :] + (1-mask),0.,1.0)
+        segmentation = torch.cat([segmentation, 1-segmentation], dim=0)
+        if process_device != sample[0].device:
+            return input_img.to(sample[0].device), segmentation.to(sample[0].device), mask.to(sample[0].device)
+        else:
+            return input_img, segmentation, mask
+
+
+
+
+
+
+#trainset=WrapRRDS(trainset,augmentation_cls,torch.device(p.tormentor_device))
+
+img,segm,mask = trainset[0]
+
+
+
+testset = RR2013Ch2(train=False, return_mask=True, cache_ds=True)
+
 
 device = torch.device(p.device)
 
 print("Loading Data into loaders... ", end="")
 trainloader=torch.utils.data.DataLoader(trainset, shuffle=True, batch_size=p.batch_size, num_workers= p.io_threads, drop_last=True)
+
+#trainloader=WrapRRDL(trainloader,augmentation_cls,torch.device(p.tormentor_device))
+trainloader = tormentor.AugmentedDataLoader(trainloader, augmentation_cls, torch.device(p.tormentor_device), augment_RRDS_batch)
 valloader=torch.utils.data.DataLoader(testset, shuffle=False, batch_size=1)
 print("done!")
 
-net = UNet(n_channels=trainset[0][0].size(0), n_classes=trainset[0][1].size(0))
+#net = UNet(n_channels=trainset[0][0].size(0), n_classes=trainset[0][1].size(0))
 
 
 print("Creating Resnet")
@@ -198,10 +231,6 @@ body = fastai.vision.learner.create_body(fastai.vision.models.resnet34, pretrain
 print("Creating Unet")
 net = fastai.vision.models.unet.DynamicUnet(body, trainset[0][1].size(0))
 print("Done")
-#net = torch.hub.load('pytorch/vision:v0.6.0', 'deeplabv3_resnet101', pretrained=True)
-#net.eval()
-#net.classifier[-1] = torch.nn.Conv2d(256, 2, kernel_size=(1, 1), stride=(1, 1))
-#net.aux_classifier[-1] = torch.nn.Conv2d(256, 2, kernel_size=(1, 1), stride=(1, 1))
 
 print("Resuming Model ... ", end="")
 per_epoch_train_errors,per_epoch_validation_errors,start_epoch,net=resume(net)

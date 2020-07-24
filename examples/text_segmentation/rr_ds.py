@@ -8,25 +8,48 @@ from collections import defaultdict
 import string
 import numpy as np
 
+def return_one():
+    return 1
+
+def re_int(x):
+    return int(re.findall("[0-9]+",x)[0])
+
+input_transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])])
+def img2gt(x):
+    return (x<.99).float()
+gt_transform = torchvision.transforms.Compose([torchvision.transforms.Grayscale(), torchvision.transforms.ToTensor(), img2gt])
+
+
+def create_alphabet():
+    symbol_map = defaultdict(return_one)
+    symbol_map[" "] = 0
+    base = max((symbol_map.values())) + 1
+    symbol_map.update({c: n + base for n, c in enumerate(string.ascii_lowercase)})
+    symbol_map.update({c: n + base for n, c in enumerate(string.ascii_uppercase)})
+    base = max((symbol_map.values())) + 1
+    symbol_map.update({c: n + base for n, c in enumerate(string.digits)})
+    return symbol_map
+
+
 class RR2013Ch2():
-    @staticmethod
-    def create_alphabet():
-        symbol_map = defaultdict(lambda: 1)
-        symbol_map[" "] = 0
-        base = max((symbol_map.values())) + 1
-        symbol_map.update({c: n + base for n, c in enumerate(string.ascii_lowercase)})
-        symbol_map.update({c: n + base for n, c in enumerate(string.ascii_uppercase)})
-        base = max((symbol_map.values())) + 1
-        symbol_map.update({c: n + base for n, c in enumerate(string.digits)})
-        return symbol_map
+    # @staticmethod
+    # def create_alphabet():
+    #     symbol_map = defaultdict(lambda: 1)
+    #     symbol_map[" "] = 0
+    #     base = max((symbol_map.values())) + 1
+    #     symbol_map.update({c: n + base for n, c in enumerate(string.ascii_lowercase)})
+    #     symbol_map.update({c: n + base for n, c in enumerate(string.ascii_uppercase)})
+    #     base = max((symbol_map.values())) + 1
+    #     symbol_map.update({c: n + base for n, c in enumerate(string.digits)})
+    #     return symbol_map
 
     def __init__(self, train=True, return_char_gt=False, return_mask=True,
                  reduce_img_size=True,
                  default_width=512+64,
                  default_height=512-64,
                  cache_ds=True,
-                 input_transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])]),
-                 gt_transform = torchvision.transforms.Compose([torchvision.transforms.Grayscale(), torchvision.transforms.ToTensor(), lambda x : (x<.99).float()]),
+                 input_transform=input_transform,
+                 gt_transform=gt_transform,
                  root="/home/anguelos/data/rr/focused_segmentation/zips",
                  train_input_fname="Challenge2_Training_Task12_Images.zip",
                  train_gt_fname="Challenge2_Training_Task2_GT.zip",
@@ -40,9 +63,10 @@ class RR2013Ch2():
         else:
             input_fname=test_input_fname
             gt_fname=test_gt_fname
-        re_int=lambda x:int(re.findall("[0-9]+",x)[0])
-        self.char2int=RR2013Ch2.create_alphabet()
-        self.max_class=max(self.char2int.values())
+
+        #self.char2int = RR2013Ch2.create_alphabet()
+        self.char2int = create_alphabet()
+        self.max_class = max(self.char2int.values())
         self.input_transform = input_transform
         self.gt_transform = gt_transform
         self.input_zipfile=zipfile.ZipFile(f"{root}/{input_fname}")
@@ -70,6 +94,10 @@ class RR2013Ch2():
                 print("saving...")
                 torch.save(self.cache, f"/tmp/ds_train_{repr(self.train)}.pt")
                 print("success!!!")
+            del self.input_zipfile
+            del self.gt_zipfile
+
+
         assert self.ids == sorted(self.id2gt_img.keys())
 
 
@@ -134,31 +162,17 @@ class RR2013Ch2():
         old_width = sample_list[0].size(-1)
         old_height = sample_list[0].size(-2)
 
-        #old_width = (sample_list[0].size(-1)//2)*2
-        #old_height = (sample_list[0].size(-2)//2)*2
-        #sample_list=[s[:,:old_width, :old_height] for s in sample_list]
-
-        #if old_height*old_width <= self.max_pixels:
-        #    return sample_list
-        #new_width = min(old_width-10, self.default_width)
-        #new_height = min(old_height-10, self.default_height)
-
         new_width = self.default_width
         new_height = self.default_height
 
         if old_height < new_height:
-            #print("Old height:",old_width, end="")
             v_pad = (1+new_height-old_height)//2
             sample_list=[torch.nn.functional.pad(input=s.unsqueeze(dim=0), pad=(0, 0, v_pad, v_pad), mode='constant', value=1)[0,:,:,:] for s in sample_list]
             old_height = sample_list[0].size(-2)
-            #print(" -> ", old_height, sample_list[0].size())
         if old_width < new_width :
-            #print("Old width:",old_width, end="")
             h_pad = (1+new_width-old_width)//2
             sample_list=[torch.nn.functional.pad(input=s.unsqueeze(dim=0), pad=(h_pad, h_pad, 0, 0), mode='constant', value=1)[0,:,:,:] for s in sample_list]
             old_width = sample_list[0].size(-1)
-            #print(" -> ", old_width, sample_list[0].size())
-        #print(old_width, old_height)
         if not self.reduce_img_size:
             return sample_list
         left = np.random.randint(0, 1+old_width-new_width)

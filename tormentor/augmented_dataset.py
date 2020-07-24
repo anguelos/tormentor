@@ -5,39 +5,43 @@ import torch
 from matplotlib import pyplot as plt
 
 
-from .base_augmentation import DeterministicImageAugmentation, SpatialImageAugmentation, StaticImageAugmentation
+from .base_augmentation import DeterministicImageAugmentation
 
 
 class AugmentedDs(torch.utils.data.Dataset):
-    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], add_mask=False, device="cpu"):
-        self.ds = ds
-        self._exemplar_augmentation = exemplar_augmentation
-        self.add_mask = add_mask
-        self.device = device
-
-    def new_augmentation(self):
-        return self._exemplar_augmentation.like_me()
-
-    def augment_sample(self, *args, augmentation=None):
-        if augmentation is None:
-            augmentation = self.new_augmentation()
+    @staticmethod
+    def augment_sample(self, *args, augmentation, process_device: torch.device):
         input_img = args[0]
         width = input_img.size(-2)
         height = input_img.size(-1)
         augmentated_data = []
-        for datum in args:
+        for n, datum in enumerate(args):
             if isinstance(datum, torch.Tensor) and datum.size(-2) == width and datum.size(-1) == height:
-                augmentated_data.append(augmentation(datum))
+                augmentated_data.append(augmentation(datum, is_mask=n > 0))
             else:
                 augmentated_data.append(datum)
-        if self.add_mask:
-            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
-            augmented_created_mask = augmentation(created_mask, is_mask=True)
-            augmentated_data.append(augmented_created_mask)
         return augmentated_data
 
+
+    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], add_mask=False, device="cpu", augment_sample_function=None):
+        self.ds = ds
+        self._exemplar_augmentation = exemplar_augmentation
+        self.add_mask = add_mask
+        self.device = device
+        if augment_sample_function is None:
+            self.augment_sample_function = AugmentedDs.augment_sample
+        else:
+            self.augment_sample_function = augment_sample_function
+
+    def new_augmentation(self):
+        return self._exemplar_augmentation.like_me()
+
     def __getitem__(self, item):
-        return self.augment_sample(*self.ds[item])
+        sample = self.ds[item]
+        if self.add_mask:
+            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            sample = tuple(sample) + (created_mask,)
+        return self.augment_sample_function(sample, self.new_augmentation(), self.device)
 
     def __len__(self):
         return len(self.ds)

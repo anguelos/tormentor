@@ -5,6 +5,7 @@ import PyQt5
 import PyQt5.QtWidgets as qwidgets
 import fargv
 import torchvision
+import time
 from PyQt5.QtCore import Qt as qt
 from PyQt5.QtCore import pyqtSlot
 
@@ -104,13 +105,14 @@ class AugmentationTweaker(qwidgets.QWidget):
         else:
             raise ValueError()
 
-    def __init__(self, augmentation_type, torch_img, replicates=12, nrow=4, show_input=True):
+    def __init__(self, augmentation_str, torch_img, replicates=12, nrow=4, show_input=True):
         super().__init__()
         self.show_input = show_input
         self.replicates = replicates
         self.nrow = nrow
-        self.augmentation_type = augmentation_type
-        self.dist_list = list(augmentation_type.get_distributions(copy=False).items())
+        self.augmentation_type = eval(augmentation_str)
+        self.augmentation_str = augmentation_str
+        self.dist_list = list(self.augmentation_type.get_distributions(copy=False).items())
         self.torch_img = torch_img
         self.initUI()
 
@@ -119,7 +121,11 @@ class AugmentationTweaker(qwidgets.QWidget):
         for tweaker in self.tweakers:
             tweaker.update_distribution()
         batch_tensor = self.torch_img.unsqueeze(dim=0).repeat(self.replicates, 1, 1, 1)
+        t = time.time()
         batch_tensor = self.augmentation_type()(batch_tensor)
+        dur = time.time() - t
+        log = f"{self.torch_img.size(-1)} x {self.torch_img.size(-2)} x {self.replicates} {1000*dur:.3} msec."
+        self.setWindowTitle(log)
         if self.show_input:
             batch_tensor[0, :, :, :] = self.torch_img
         batch_tensor = batch_tensor.to("cpu")
@@ -157,6 +163,6 @@ if __name__ == "__main__":
     params, _ = fargv.fargv(params, return_named_tuple=True)
     img = torchvision.transforms.ToTensor()(PIL.Image.open(params.image)).to(params.device)
     app = qwidgets.QApplication([])
-    d = AugmentationTweaker(eval(params.augmentation), img, params.replicates, params.ncol, params.show_input)
+    d = AugmentationTweaker(params.augmentation, img, params.replicates, params.ncol, params.show_input)
     d.show()
     app.exec_()
