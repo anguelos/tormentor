@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import tormentor
+
+import tormentor # used by the command line argument
+
 import PIL
 import PyQt5
 import PyQt5.QtWidgets as qwidgets
@@ -10,7 +12,7 @@ from PyQt5.QtCore import Qt as qt
 from PyQt5.QtCore import pyqtSlot
 
 
-class DistributionTweaker(qwidgets.QWidget):
+class UniformDistributionTweaker(qwidgets.QWidget):
     def __init__(self, name, distribution):
         super().__init__()
         self.options_range = (distribution.min[0].cpu().item(), distribution.max[0].cpu().item())
@@ -91,8 +93,8 @@ class DistributionTweaker(qwidgets.QWidget):
         self.update_extremes()
         self.update_txt()
 
-        # self.setWindowTitle('Signal and slot')
         self.show()
+
 
 
 class AugmentationTweaker(qwidgets.QWidget):
@@ -134,18 +136,36 @@ class AugmentationTweaker(qwidgets.QWidget):
         data = im.tobytes("raw", "RGBA")
         qim = PyQt5.QtGui.QImage(data, im.size[0], im.size[1], PyQt5.QtGui.QImage.Format_RGBA8888)
         self.img_label.setPixmap(PyQt5.QtGui.QPixmap.fromImage(qim))
+        self.augmentation_str_box.setText(repr(self.augmentation_type))
 
     def initUI(self):
         self.tweakers = []
         vbox = qwidgets.QVBoxLayout()
+        self.augmentation_str_box = qwidgets.QLineEdit()
+        vbox.addWidget(self.augmentation_str_box)
         self.img_label = qwidgets.QLabel()
         vbox.addWidget(self.img_label)
+
+
+
+        scroll_vbox = qwidgets.QVBoxLayout()
+        group_box = qwidgets.QGroupBox()
+        group_box.setLayout(scroll_vbox)
+        sa = qwidgets.QScrollArea()
+        sa.setWidgetResizable(True)
+        #sa.setFixedHeight(400)
+        sa.setWidget(group_box)
+        vbox.addWidget(sa)
         for name, distribution in self.dist_list:
-            tweaker = DistributionTweaker(name, distribution)
-            vbox.addWidget(tweaker)
-            self.tweakers.append(tweaker)
+            if isinstance(distribution, tormentor.Uniform):
+                tweaker = UniformDistributionTweaker(name, distribution)
+                scroll_vbox.addWidget(tweaker)
+                self.tweakers.append(tweaker)
+            else:
+                scroll_vbox.addWidget(qwidgets.QLabel(f"{name}: {repr(distribution)}"))
         redraw_button = qwidgets.QPushButton("Redraw")
         redraw_button.clicked.connect(self.update_augmentation)
+
         vbox.addWidget(redraw_button)
         self.setLayout(vbox)
         self.update_augmentation()

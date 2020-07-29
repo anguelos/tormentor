@@ -45,8 +45,8 @@ class RR2013Ch2():
 
     def __init__(self, train=True, return_char_gt=False, return_mask=True,
                  reduce_img_size=True,
-                 default_width=512+64,
-                 default_height=512-64,
+                 default_width=512+128,
+                 default_height=512+128,
                  cache_ds=True,
                  input_transform=input_transform,
                  gt_transform=gt_transform,

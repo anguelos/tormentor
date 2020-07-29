@@ -9,8 +9,8 @@ from .base_augmentation import DeterministicImageAugmentation
 
 
 class AugmentedDs(torch.utils.data.Dataset):
-    @staticmethod
-    def augment_sample(self, *args, augmentation, process_device: torch.device):
+    @classmethod
+    def augment_sample(cls, *args, augmentation, process_device: torch.device):
         input_img = args[0]
         width = input_img.size(-2)
         height = input_img.size(-1)
@@ -23,13 +23,13 @@ class AugmentedDs(torch.utils.data.Dataset):
         return augmentated_data
 
 
-    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], add_mask=False, device="cpu", augment_sample_function=None):
+    def __init__(self, ds, exemplar_augmentation, add_mask=False, device="cpu", augment_sample_function=None):
         self.ds = ds
         self._exemplar_augmentation = exemplar_augmentation
         self.add_mask = add_mask
         self.device = device
         if augment_sample_function is None:
-            self.augment_sample_function = AugmentedDs.augment_sample
+            self.augment_sample_function = type(self).augment_sample
         else:
             self.augment_sample_function = augment_sample_function
 
@@ -41,7 +41,7 @@ class AugmentedDs(torch.utils.data.Dataset):
         if self.add_mask:
             created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
             sample = tuple(sample) + (created_mask,)
-        return self.augment_sample_function(sample, self.new_augmentation(), self.device)
+        return self.augment_sample_function(*sample, self.new_augmentation(), self.device)
 
     def __len__(self):
         return len(self.ds)
@@ -74,9 +74,8 @@ class AugmentedCocoDs(AugmentedDs):
         size = [mask.size(2), mask.size(3)]
         return rle, size
 
-    def augment_sample(self, input, target, augmentation=None):
-        if augmentation is None:
-            augmentation = self.new_augmentation()
+    @classmethod
+    def augment_sample(cls, input, target, mask, augmentation, process_device):
         point_cloud_x = []
         point_cloud_y = []
         n = 0
@@ -87,7 +86,7 @@ class AugmentedCocoDs(AugmentedDs):
                 object_start_end_pos.append(None)
                 object_mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"],
                                                 coco_object["segmentation"]["size"])
-                obj_mask_images.append(object_mask.to(self.device))
+                obj_mask_images.append(object_mask.to(process_device))
             else:
                 object_surfaces = []
                 for surface_n in range(len(coco_object["segmentation"])):
@@ -100,15 +99,15 @@ class AugmentedCocoDs(AugmentedDs):
                     end_pos = n
                     object_surfaces.append((start_pos, end_pos))
                 object_start_end_pos.append(object_surfaces)
-        pc = (torch.tensor(point_cloud_x, device=self.device), torch.tensor(point_cloud_y, device=self.device))
-        input = input.to(self.device)  # making a batch from an image
+        pc = (torch.tensor(point_cloud_x, device=process_device), torch.tensor(point_cloud_y, device=process_device))
+        input = input.to(process_device)  # making a batch from an image
         aug_pc, aug_img = augmentation(pc, input)
         if len(obj_mask_images):
             obj_mask_images = torch.cat(obj_mask_images, dim=1).float()
             aug_obj_masks = augmentation(obj_mask_images)
-        if self.add_mask:
-            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
-            augmented_created_mask = augmentation(created_mask, is_mask=True)
+        if mask is not None:
+            #created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            augmented_created_mask = augmentation(mask, is_mask=True)
 
         X, Y = aug_pc
         aug_target = []
@@ -152,7 +151,7 @@ class AugmentedCocoDs(AugmentedDs):
                       "segmentation": segmentation,
                       "bbox": [left, top, width, height]}
             aug_target.append(object)
-        if self.add_mask:
+        if mask is not None:
             return aug_img, aug_target, augmented_created_mask
         else:
             return aug_img, aug_target
@@ -242,7 +241,6 @@ class AugmentedVOCSegmentationDs(AugmentedDs):
                  n_classes=20, neutral_label=255, zero_bias=.001):
         super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask)
         self.device = device
-
 
     def __getitem__(self, item):
         input, segmentation = self.ds[item]

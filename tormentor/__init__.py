@@ -9,34 +9,39 @@ General design principles:
 
 """
 
+import types
 from .random import Uniform, Bernoulli, Distribution, Categorical
 from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
+from .factory import AugmentationFactory
 from .spatial_augmentations import *
 from .color_augmentations import *
 from .augmented_dataset import AugmentedDs, AugmentedCocoDs
 from .augmented_dataloader import AugmentedDataLoader
-from .wrap import Wrap, ShredAugmentation
+from .wrap import Wrap, Shred
 from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
-leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(StaticImageAugmentation.__subclasses__())
+leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(StaticImageAugmentation.__subclasses__()) + tuple(ColorAugmentation.__subclasses__())
 
 all_factory_names = []
 all_augmentation_names = []
-for aug in leaf_augmentations:
-    aug_name = aug.__name__
-    distributions = aug.distributions
-    aug_default_params = ", ".join((f"{k}={repr(v)}" for k, v in aug.distributions.items()))
-    aug_params = ", ".join(f"{name}={name}" for name in aug.distributions.keys())
-    factory_alias_def = f"def Random{aug_name}({aug_default_params}):\n\treturn {aug_name}.factory({aug_params})"
-    exec(factory_alias_def)
-    all_augmentation_names.append(aug_name)
-    all_factory_names.append(f"def Random{aug_name}")
 
-choice = AugmentationChoice.create
-cascade = AugmentationCascade.create
+def __or__(self, other):
+    return AugmentationFactory(self).__or__(other)
+
+def __and__(self, other):
+    return AugmentationFactory(self).__and__(other)
+
+
+for aug in leaf_augmentations:
+    aug.__or__ = types.MethodType(__or__, aug)
+    aug.__and__ = types.MethodType(__and__, aug)
+factory_dict = {f"Random{aug.__name__}": AugmentationFactory(aug) for aug in leaf_augmentations}
+all_factory_names = list(factory_dict.keys())
+locals().update(factory_dict)
+
 
 __all__ = [
     "debug_pattern",
@@ -50,18 +55,6 @@ __all__ = [
     "Rotate",
     "DeterministicImageAugmentation",
     "SpatialImageAugmentation",
-    "ChannelImageAugmentation",
-    "ImageAugmentationPipelineDataset",
-    "WrapAugmentation",
     "AugmentedDs",
     "AugmentedCocoDs",
-    "ImageAugmentationPipelineDataset",
-    "reset_all_seeds",
-    "ConstantBackground",
-    "UniformNoiseBackground",
-    "NormalNoiseBackground",
-    "PlasmaBackground",
-    "ShredAugmentation",
-    "choice",
-    "cascade"
-] + all_augmentation_names + all_factory_names
+    "reset_all_seeds"   ] + all_augmentation_names + all_factory_names

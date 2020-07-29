@@ -9,14 +9,27 @@ class ColorAugmentation(StaticImageAugmentation):
         if batch_tensor.size(1) == 3: # Color operations require
             return type(self).functional_image(*((batch_tensor,) + state))
         if batch_tensor.size(1) == 1: # Color operations require
-            batch_tensor = batch_tensor.repeat([1,3,1,1])
+            batch_tensor = batch_tensor.repeat([1, 3, 1, 1])
             batch_tensor = type(self).functional_image(*((batch_tensor,) + state))
             return K.color.rgb_to_grayscale(batch_tensor)
         else: # No colors were in the image, it will be ignored
             return batch_tensor
 
+class Invert(ColorAugmentation):
+    do_inversion = Bernoulli(.2)
+    def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
+        do_inversion = type(self).do_inversion(batch.size(0), device=batch.device).view(-1).float()
+        return do_inversion,
 
-class BrightnessChanger(ColorAugmentation):
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, do_inversion: torch.FloatTensor) -> torch.FloatTensor:
+        do_inversion = do_inversion.view(-1, 1, 1)
+        hsv_batch = K.color.rgb_to_hsv(batch)
+        hsv_batch[:, 0, :, :] = (1 - hsv_batch[:, 0, :, :]) * do_inversion + hsv_batch[:, 0, :, :] * (1 - do_inversion)
+        return K.color.hsv_to_rgb(hsv_batch)
+
+
+class Brightness(ColorAugmentation):
     brightness = Uniform((-1.0, 1.0))
 
     def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
@@ -29,7 +42,7 @@ class BrightnessChanger(ColorAugmentation):
         return K.color.adjust_brightness(batch, brightness)
 
 
-class SaturationChanger(ColorAugmentation):
+class Saturation(ColorAugmentation):
     saturation = Uniform((0.0, 2.0))
 
     def generate_batch_state(self, batch:torch.FloatTensor)->SpatialAugmentationState:
@@ -42,7 +55,7 @@ class SaturationChanger(ColorAugmentation):
         return K.color.adjust_saturation(batch, saturation)
 
 
-class ContrastChanger(ColorAugmentation):
+class Contrast(ColorAugmentation):
     contrast = Uniform((0.0, 1.0))
 
     def generate_batch_state(self, batch: torch.FloatTensor)->SpatialAugmentationState:
@@ -54,11 +67,11 @@ class ContrastChanger(ColorAugmentation):
         #contrast = contrast.view(-1, 1, 1, 1)
         return K.color.adjust_saturation(batch, contrast)
 
-class HueChanger(ColorAugmentation):
+class Hue(ColorAugmentation):
     hue = Uniform((-.5, .5))
 
     def generate_batch_state(self, batch:torch.FloatTensor) -> SpatialAugmentationState:
-        hue = type(self).contrast(batch.size(0), device=batch.device).view(-1)
+        hue = type(self).hue(batch.size(0), device=batch.device).view(-1)
         return hue,
 
     @classmethod
@@ -96,6 +109,22 @@ class PlasmaBrightness(ColorAugmentation):
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
         plasma_sz = (batch_sz, 1, height, width)
+        brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
+        return brightness_map,
+
+    @classmethod
+    def functional_image(cls, batch:torch.FloatTensor, brightness_map: torch.FloatTensor)->torch.FloatTensor:
+        #brightness = brightness.view(-1, 1, 1, 1)
+        return torch.clamp(batch + brightness_map, 0, 1)
+
+
+class PlasmaRgbBrightness(ColorAugmentation):
+    roughness = Uniform(value_range=(.1, .7))
+
+    def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        batch_sz, channels, height, width = batch_tensor.size()
+        roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
+        plasma_sz = (batch_sz, 3, height, width)
         brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
         return brightness_map,
 

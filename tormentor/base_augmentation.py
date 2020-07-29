@@ -251,12 +251,19 @@ class DeterministicImageAugmentation(object):
             return {k: v for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
 
     @classmethod
+    def augmentation_type(cls):
+        try:
+            return cls.original_augmentation
+        except AttributeError:
+            return cls
+
+    @classmethod
     def override_distributions(cls, requires_grad=False, **kwargs):
-        cls_distributions = cls.get_distributions()
+        cls_members = cls.get_distributions()
         assert all([isinstance(v, Distribution) for v in kwargs.values()])
-        assert set(kwargs.keys()) <= set(cls_distributions.keys())
-        cls_distributions.update(kwargs)
-        for cls_distribution in cls_distributions.values():
+        assert set(kwargs.keys()) <= set(cls_members.keys())
+        cls_members.update(kwargs)
+        for cls_distribution in cls_members.values():
             for parameter in cls_distribution.get_distribution_parameters().values():
                 parameter.requires_grad_(requires_grad)
         ridx = cls.__qualname__.rfind("_")
@@ -265,7 +272,10 @@ class DeterministicImageAugmentation(object):
         else:
             cls_oldname = cls.__qualname__[:ridx]
         new_cls_name = f"{cls_oldname}_{torch.randint(1000000,9000000,(1,)).item()}"
-        new_cls = type(new_cls_name, (cls,), cls_distributions)
+
+        cls_members.update({"original_augmentation":cls.augmentation_type()})
+
+        new_cls = type(new_cls_name, (cls,), cls_members)
         return new_cls
 
     @property
@@ -551,7 +561,8 @@ class AugmentationCascade(DeterministicImageAugmentation):
     def get_distributions(cls, copy: bool = True):
         res = {}
         for n, contained_augmentation in enumerate(cls.augmentation_list):
-            res.update({f"{n}_{k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
+            aug_name = f"{contained_augmentation.__qualname__}{n}"
+            res.update({f"{aug_name}: {k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
         return res
 
 

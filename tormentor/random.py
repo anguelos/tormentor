@@ -36,6 +36,11 @@ class Uniform(Distribution):
         param_str = f" do_rsample={self.do_rsample}"
         return f"{self.__class__.__qualname__}(value_range={range_str}, {param_str})"
 
+    def __str__(self):
+        range_str = f"({self.distribution.low.item():.3}, {self.distribution.high.item():.3})"
+        return f"{self.__class__.__qualname__}(value_range={range_str})"
+
+
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         if self.do_rsample:
             raise NotImplemented
@@ -73,7 +78,6 @@ class Constant(Distribution):
     def copy(self, do_rsample=None):
         if do_rsample is None:
             do_rsample = self.do_rsample
-        print(self.value)
         return Constant(value=self.value.item(), do_rsample=do_rsample)
 
     def get_distribution_parameters(self):
@@ -96,8 +100,13 @@ class Bernoulli(Distribution):
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__
-        prob = self.prob.item()
-        return f"{name}(prob={prob}, do_rsample={self.do_rsample})"
+        prob = self.prob.cpu().tolist()
+        return f"{name}(prob={repr(prob)}, do_rsample={self.do_rsample})"
+
+    def __str__(self) -> str:
+        name = self.__class__.__qualname__
+        prob = float(self.prob.cpu()[0])
+        return f"{name}(prob={repr(prob):.3})"
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -132,6 +141,11 @@ class Categorical(Distribution):
         name = self.__class__.__qualname__
         probs = tuple(self.probs.tolist())
         return f"{name}(prob={probs}, do_rsample={self.do_rsample})"
+
+    def __str__(self) -> str:
+        name = self.__class__.__qualname__
+        probs = "(" + ", ".join([f"{p:.3}" for p in self.probs.tolist()]) + ")"
+        return f"{name}(prob={probs})"
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
