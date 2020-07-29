@@ -17,6 +17,7 @@ import sys
 
 p={
     "arch":["dunet34", "unet", "dunet18", "dunet50"],
+    "rrds_root": "/home/anguelos/data/rr/focused_segmentation/zips",
     "dataset": ["rrds", "dibco"],
     "augmentation": "tormentor.RandomPlasmaBrightness & tormentor.RandomPerspective & tormentor.RandomHue & tormentor.RandomSaturation & tormentor.RandomInvert",
     "io_threads": 1,
@@ -171,7 +172,7 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
 
 
 
-trainset = RR2013Ch2(train=True, return_mask=True,cache_ds=True)
+trainset = RR2013Ch2(train=True, return_mask=True,cache_ds=True,root=p.rrds_root)
 
 
 def augment_RRDS_batch(batch, augmentation,process_device):
@@ -211,7 +212,7 @@ def augment_RRDS_sample(sample, augmentation,process_device):
 
 
 
-testset = RR2013Ch2(train=False, return_mask=True, cache_ds=True)
+testset = RR2013Ch2(train=False, return_mask=True, cache_ds=True,root=p.rrds_root)
 
 
 device = torch.device(p.device)

@@ -20,5 +20,5 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Topic :: Scientific/Engineering"],
-    install_requires=["torch", "matplotlib", "torchvision", "fargv"],
+    install_requires=["torch", "matplotlib", "torchvision", "fargv", "kornia"],
 )
