@@ -37,8 +37,6 @@ class Perspective(SpatialImageAugmentation):
         new_Y = new_Y / new_Z
         return new_X, new_Y
 
-
-
 class ExtendedRotate(SpatialImageAugmentation):
     translation_x = Uniform((-.25, .25))
     translation_y = Uniform((-.25, .25))
