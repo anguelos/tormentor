@@ -30,6 +30,7 @@ p={
     "val_device":"{device}",
     "validate_freq": 5,
     "trainoutputs_freq": 5,
+    "archive_nets":False
     "batch_size": 1,
     "save_freq": 10,
     "mask_gt": 1,
@@ -47,6 +48,11 @@ def save(param_hist, per_epoch_train_errors,per_epoch_validation_errors,epoch,ne
     save_dict["per_epoch_validation_errors"] = per_epoch_validation_errors
     save_dict["epoch"]=epoch
     torch.save(save_dict, p.resume_fname)
+    if p.archive_nets:
+        folder="/".join(p.resume_fname.split("/")[:-1])
+        if folder == "":
+            folder = "."
+        torch.save(save_dict, f"{folder}/{p.arch}_{epoch:05}.pt")
 
 def resume(net):
     try:
