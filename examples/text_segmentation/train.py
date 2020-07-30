@@ -16,6 +16,7 @@ import sys
 
 
 p={
+    "save_images":False,
     "arch":["dunet34", "unet", "dunet18", "dunet50"],
     "rrds_root": "/home/anguelos/data/rr/focused_segmentation/zips",
     "dataset": ["rrds", "dibco"],
@@ -164,8 +165,8 @@ def run_epoch(p,device,loader,net,criterion,optimizer=None,save_images=True,is_d
     lines.append('')
     print("N:\t{} % computed in {:05f} sec.".format(isval_str, time.time()-t))
     print("\n".join(lines))
-    if save_images:
-        torch.save(model_outputs,"/tmp/{}_samples.pt".format(isval_str))
+    #if save_images:
+    #    torch.save(model_outputs,"/tmp/{}_samples.pt".format(isval_str))
     return sum(fscores) / len(fscores),sum(precisions) / len(precisions), sum(recalls) / len(recalls),sum(losses) / len(losses)
 
 
@@ -285,8 +286,8 @@ for epoch in range(start_epoch, p.epochs):
         param_hist[epoch] = param_dict
         save(param_hist, per_epoch_train_errors,per_epoch_validation_errors,epoch,net)
     if p.validate_freq != 0 and epoch % p.validate_freq == 0:
-        fscore,precision,recall, loss=run_epoch(p,p.val_device, valloader, net, criterion, optimizer=None, save_images=True, is_deeplabv3=False)
+        fscore,precision,recall, loss=run_epoch(p,p.val_device, valloader, net, criterion, optimizer=None, save_images=p.save_images, is_deeplabv3=False)
         per_epoch_validation_errors[epoch]=fscore,precision,recall,loss
     save_outputs=p.trainoutputs_freq != 0 and epoch % p.trainoutputs_freq == 0
-    fscore, precision, recall, loss=run_epoch(p,p.device, trainloader, net, criterion, optimizer=optim, save_images=save_outputs, is_deeplabv3=False)
+    fscore, precision, recall, loss=run_epoch(p,p.device, trainloader, net, criterion, optimizer=optim, save_images=p.save_images, is_deeplabv3=False)
     per_epoch_train_errors[epoch]=fscore, precision, recall, loss
