@@ -244,7 +244,7 @@ if p.arch == "dunet34":
     for m in net.modules():
         if isinstance(m, torch.nn.BatchNorm2d):
             m.momentum = p.bn_momentum
-if p.arch == "dunet50":
+elif p.arch == "dunet50":
     print("Creating Resnet")
     body = fastai.vision.learner.create_body(fastai.vision.models.resnet50, pretrained=True, cut=-2)
     print("Creating Unet")
