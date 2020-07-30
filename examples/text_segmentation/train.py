@@ -30,7 +30,7 @@ p={
     "val_device":"{device}",
     "validate_freq": 5,
     "trainoutputs_freq": 5,
-    "archive_nets":False
+    "archive_nets":False,
     "batch_size": 1,
     "save_freq": 10,
     "mask_gt": 1,
