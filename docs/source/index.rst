@@ -13,7 +13,6 @@ Welcome to Tormentor's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Package Reference
-
    tormentor
 
 

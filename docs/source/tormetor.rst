@@ -17,13 +17,13 @@ Abstract Augmentation Types
 .. autoclass:: DeterministicImageAugmentation
 .. autoclass:: SpatialImageAugmentation
 .. autoclass:: StaticImageAugmentation
-.. autoclass:: ColorImageAugmentation
+.. autoclass:: ColorAugmentation
 .. autoclass:: AugmentationCascade
 .. autoclass:: AugmentationChoice
 
 
 SpatialAugmentations
---------
+--------------------
 
 .. autoclass:: Perspective
 .. autoclass:: ExtendedRotate
