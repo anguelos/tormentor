@@ -22,6 +22,11 @@ class Distribution(torch.nn.Module):
     def get_distribution_parameters(self):
         raise NotImplementedError()
 
+    def __eq__(self, other):
+        raise NotImplementedError
+        #this should be tested
+        return type(self) is type(other) and self.get_distribution_parameters() == other.get_distribution_parameters()
+
 
 class Uniform(Distribution):
     def __init__(self, value_range: TupleRange = (0.0, 1.0), do_rsample=False):

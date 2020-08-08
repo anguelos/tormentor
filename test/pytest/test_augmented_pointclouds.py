@@ -1,6 +1,6 @@
+import pytest
 import torch
 from matplotlib import pyplot as plt
-
 import tormentor
 
 tormentor.DeterministicImageAugmentation.reset_all_seeds(global_seed=100)
@@ -12,11 +12,12 @@ for cls in [tormentor.SpatialImageAugmentation, tormentor.StaticImageAugmentatio
     augmentations_cls_list += cls.__subclasses__()
 
 epsilon = .00000001
-plot_dbg = True
+plot_dbg = False
 n_replicates = 1
 n_pointclusters = 7
 tolerance = 4  # pixels
 width, height = 320, 240
+
 
 def helper_create_pointcloud(width, height, n_points):
     pointcloud = torch.zeros([1 + 30, n_points]), torch.zeros([1 + 30, n_points])
@@ -82,26 +83,10 @@ def helper_test_pointcoulds_as_images(augmentation_cls):
                 assert (crude_x - precise_x) ** 2 < tolerance ** 2
                 assert (crude_y - precise_y) ** 2 < tolerance ** 2
 
-def test_rotation():
-    helper_test_pointcoulds_as_images(tormentor.Rotate)
+testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.RemoveRectangle, tormentor.Shred})
+testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
+testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 
-def test_zoom():
-    helper_test_pointcoulds_as_images(tormentor.Zoom)
-
-def test_scale():
-    helper_test_pointcoulds_as_images(tormentor.Scale)
-
-def test_translate():
-    helper_test_pointcoulds_as_images(tormentor.Translate)
-
-def test_scale_translate():
-    helper_test_pointcoulds_as_images(tormentor.ScaleTranslate)
-
-def test_flip():
-    helper_test_pointcoulds_as_images(tormentor.Flip)
-
-def test_elastic_transform():
-    helper_test_pointcoulds_as_images(tormentor.ElasticTransform)
-
-def test_warp():
-    helper_test_pointcoulds_as_images(tormentor.Wrap)
+@pytest.mark.parametrize("augmentation_cls",[cls for cls in testable_augmentations])
+def test_augmentation_pointcloud(augmentation_cls):
+    helper_test_pointcoulds_as_images(augmentation_cls)
