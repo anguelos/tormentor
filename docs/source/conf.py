@@ -14,6 +14,15 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import os
+import sys
+
+import tormentor
+
+import sphinx_gallery
+import sphinx_rtd_theme
+
+
 
 # -- Project information -----------------------------------------------------
 
@@ -36,13 +45,13 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
-#    'sphinx.ext.coverage',
-#    'sphinx.ext.mathjax',
-#    'sphinx.ext.napoleon',
-#    'sphinx.ext.viewcode',
-#    'sphinx.ext.githubpages',
-#    'nbsphinx',
-#    'sphinxcontrib.bibtex',
+    'sphinx.ext.coverage',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.githubpages',
+    'nbsphinx',
+    'sphinxcontrib.bibtex',
 #    'sphinx_gallery.gen_gallery',
 ]
 
@@ -63,6 +72,10 @@ source_suffix = ['.rst', '.ipynb']
 #
 html_theme = 'alabaster'
 html_theme = 'agogo'
+
+html_theme = 'sphinx_rtd_theme'
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
