@@ -83,7 +83,10 @@ def helper_test_pointcoulds_as_images(augmentation_cls):
                 assert (crude_x - precise_x) ** 2 < tolerance ** 2
                 assert (crude_y - precise_y) ** 2 < tolerance ** 2
 
-testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.RemoveRectangle, tormentor.Shred})
+testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.RemoveRectangle, tormentor.Shred,
+                                                               tormentor.CropTo, tormentor.PadTo,
+                                                               tormentor.ElasticTransform})
+testable_augmentations += [tormentor.ElasticTransform.override_distributions(harmonic_smoothing=tormentor.Uniform((5.,20.)))]
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
 testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 

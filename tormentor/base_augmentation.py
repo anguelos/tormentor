@@ -53,7 +53,7 @@ def create_sampling_field(width: int, height: int, batch_size: int = 1, device:t
     sf = K.utils.create_meshgrid(height=height, width=width, normalized_coordinates=True, device=device)
     sf = (sf[:, :, :, 0], sf[:, :, :, 1])
     if batch_size == 0:
-        sf[0][0, :, :], sf[1][0, :, :]
+        return sf[0][0, :, :], sf[1][0, :, :]
     else:
         return sf[0].repeat([batch_size, 1, 1]), sf[1].repeat([batch_size, 1, 1])
 
@@ -282,15 +282,16 @@ class DeterministicImageAugmentation(object):
             pointcloud, image_tensor = args
             return self.augment_pointcloud(pointcloud, image_tensor, compute_img)
         elif isinstance(args[0], tuple): # sampling field
-            assert (2 <= len(args[0][0].size()) <= 3) and len(args[1].size()) == 2
+            assert (2 <= args[0][0].ndim <= 3)
             return self.augment_sampling_field(args[0])
         elif isinstance(args[0], torch.Tensor) and not is_mask: # image
-            assert 3 <= len(args[0].size()) <= 4
+            assert 3 <= args[0].ndim <= 4
             return self.augment_image(args[0])
         elif isinstance(args[0], torch.Tensor) and is_mask:
-            assert 3 <= len(args[0].size()) <= 4
+            assert 3 <= args[0].ndim <= 4
             return self.augment_mask(args[0])
         else:
+            print(args)
             raise ValueError
 
 
@@ -337,10 +338,13 @@ class DeterministicImageAugmentation(object):
 
     @classmethod
     def get_distributions(cls, copy=True):
-        if copy:
-            return {k: v.copy() for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
-        else:
-            return {k: v for k, v in cls.__dict__.items() if isinstance(v, Distribution)}
+        res = {}
+        for me_or_parent in reversed(cls.mro()):
+            if copy:
+                res.update({k: v.copy() for k, v in me_or_parent.__dict__.items() if isinstance(v, Distribution)})
+            else:
+                res.update({k: v for k, v in me_or_parent.__dict__.items() if isinstance(v, Distribution)})
+        return res
 
     @classmethod
     def augmentation_type(cls):
@@ -363,9 +367,9 @@ class DeterministicImageAugmentation(object):
             cls_oldname = cls.__qualname__
         else:
             cls_oldname = cls.__qualname__[:ridx]
-        new_cls_name = f"{cls_oldname}_{torch.randint(1000000,9000000,(1,)).item()}"
+        new_cls_name = f"{cls_oldname}_{torch.randint(1000000, 9000000, (1,)).item()}"
 
-        cls_members.update({"original_augmentation":cls.augmentation_type()})
+        cls_members.update({"original_augmentation": cls.augmentation_type()})
 
         new_cls = type(new_cls_name, (cls,), cls_members)
         return new_cls

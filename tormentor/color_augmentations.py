@@ -199,10 +199,9 @@ class PlasmaContrast(ColorAugmentation):
 
 
 class PlasmaShadow(ColorAugmentation):
-    r"""Lowers the brightness of the image over a random mask.
+    r"""Lowers   the brightness of the image over a random mask.
 
     .. image:: _static/example_images/PlasmaShadow.png
-
    """
     roughness = Uniform(value_range=(.1, .7))
     shade_intencity = Uniform(value_range=(-1.0, .0))

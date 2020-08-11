@@ -58,11 +58,9 @@ class AugmentationFactory(torch.nn.Module):
         return AugmentationFactory(choice)
 
     def __rxor__(self, other):
-        print("XOR")
         return AugmentationFactory._choose(other, self)
 
     def __xor__(self, other):
-        print("XOR")
         return AugmentationFactory._choose(self, other)
 
     def __and__(self, other):

@@ -245,6 +245,10 @@ class RemoveRectangle(SpatialImageAugmentation):
 class ElasticTransform(SpatialImageAugmentation):
     r"""Augmentation ElasticTransform.
 
+    This augmentation does not guaranty to be a homomorphism. In order for the augmentation to behave as a homomorphism,
+    ``harmonic_smoothing`` must be quite low. On the other hand, the complexity of the operation is n**2 with respect to
+    ``harmonic_smoothing`` or n log(n) depending of how the gaussian filters are implemented.
+
     .. image:: _static/example_images/ElasticTransform.png
     """
     offset_x = Uniform((-1.0, 1.0))

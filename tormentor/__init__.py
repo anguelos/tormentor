@@ -10,51 +10,64 @@ General design principles:
 """
 
 import types
-from .random import Uniform, Bernoulli, Distribution, Categorical
-from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
-from .factory import AugmentationFactory
-from .spatial_augmentations import *
-from .color_augmentations import *
-from .augmented_dataset import AugmentedDs, AugmentedCocoDs
+
 from .augmented_dataloader import AugmentedDataLoader
-from .wrap import Wrap, Shred
-from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
+from .augmented_dataset import AugmentedDs, AugmentedCocoDs
+from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, \
+    AugmentationChoice, AugmentationCascade, create_sampling_field, apply_sampling_field
+from .color_augmentations import *
+from .factory import AugmentationFactory
+from .random import Uniform, Bernoulli, Distribution, Categorical
+from .resizing_augmentation import *
+from .spatial_augmentations import *
+# from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern
+from .wrap import Wrap, Shred
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
-leaf_augmentations = tuple(SpatialImageAugmentation.__subclasses__()) + tuple(StaticImageAugmentation.__subclasses__()) + tuple(ColorAugmentation.__subclasses__())
+_abstract_augmentations = {DeterministicImageAugmentation, StaticImageAugmentation, SpatialImageAugmentation,
+                           ColorAugmentation, ResizingAugmentation, AugmentationCascade, AugmentationChoice}
 
-all_factory_names = []
-all_augmentation_names = []
+_all_augmentations = {obj for obj in locals().values() if
+                      isinstance(obj, type) and issubclass(obj, DeterministicImageAugmentation)}
+_leaf_augmentations = _all_augmentations - _abstract_augmentations
 
-def __or__(self, other):
-    return AugmentationFactory(self).__or__(other)
 
-def __and__(self, other):
+def __xor__aug(self, other):
+    return AugmentationFactory(self).__xor__(other)
+
+
+def __and__aug(self, other):
     return AugmentationFactory(self).__and__(other)
 
 
-for aug in leaf_augmentations:
-    aug.__or__ = types.MethodType(__or__, aug)
-    aug.__and__ = types.MethodType(__and__, aug)
-factory_dict = {f"Random{aug.__name__}": AugmentationFactory(aug) for aug in leaf_augmentations}
+for aug in _leaf_augmentations:
+    aug.__xor__ = types.MethodType(__xor__aug, aug)
+    aug.__and__ = types.MethodType(__and__aug, aug)
+
+factory_dict = {f"Random{aug.__name__}": AugmentationFactory(aug) for aug in _leaf_augmentations}
 all_factory_names = list(factory_dict.keys())
 locals().update(factory_dict)
 
+_all_augmentation_names = [aug.__name__ for aug in _all_augmentations]
 
 __all__ = [
-    "debug_pattern",
-    "Constant",
-    "Uniform",
-    "Bernoulli",
-    "Distribution",
-    "Categorical",
-    "AugmentationChoice",
-    "Scale",
-    "Rotate",
-    "DeterministicImageAugmentation",
-    "SpatialImageAugmentation",
-    "AugmentedDs",
-    "AugmentedCocoDs",
-    "reset_all_seeds"   ] + all_augmentation_names + all_factory_names
+              "_abstract_augmentations",
+              "_all_augmentations",
+              "_leaf_augmentations",
+              "create_sampling_field",
+              "debug_pattern",
+              "Constant",
+              "Uniform",
+              "Bernoulli",
+              "Distribution",
+              "Categorical",
+              "AugmentationChoice",
+              "Scale",
+              "Rotate",
+              "DeterministicImageAugmentation",
+              "SpatialImageAugmentation",
+              "AugmentedDs",
+              "AugmentedCocoDs",
+              "reset_all_seeds"] + _all_augmentation_names + all_factory_names
