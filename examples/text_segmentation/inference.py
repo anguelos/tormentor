@@ -20,7 +20,7 @@ p = {
     "n_channels":3,
     "n_classes":2,
     "bn_momentum":.1,
-    "arch":[("dunet34","dunet18","dunet50","unet"),"Model Archtecture"],
+    "arch":[("dunet34","dunet18","dunet50","unet", "R2AttUNet", "AttUNet", "R2UNet", "UNet"),"Model Archtecture"],
     "device": "cpu",
     "model_fname": "{arch}.pt",
     "inputs": set([]),
