@@ -31,17 +31,43 @@ def create_alphabet():
     return symbol_map
 
 
+def augment_RRDS_batch(batch, augmentation,process_device):
+    input_imgs, segmentations, masks = batch
+    if process_device != batch[0].device:
+        input_imgs=input_imgs.to(process_device)
+        segmentations=segmentations.to(process_device)
+        masks=masks.to(process_device)
+    with torch.no_grad():
+        input_imgs = augmentation(input_imgs)
+        segmentations = augmentation(segmentations, is_mask=True)
+        masks = augmentation(masks, is_mask=True)
+        segmentations = torch.clamp(segmentations[:,:1, :, :] + (1-masks),0.,1.0)
+        segmentations = torch.cat([segmentations, 1-segmentations], dim=1)
+        if process_device != batch[0].device:
+            return input_imgs.to(batch[0].device), segmentations.to(batch[0].device), masks.to(batch[0].device)
+        else:
+            return input_imgs, segmentations, masks
+
+
+def augment_RRDS_sample(sample, augmentation,process_device):
+    input_img, segmentation, mask = sample
+    if process_device != sample[0].device:
+        input_img=input_img.to(process_device)
+        segmentation=segmentation.to(process_device)
+        mask = mask.to(process_device)
+    with torch.no_grad():
+        input_img = augmentation(input_img)
+        segmentation = augmentation(segmentation, is_mask=True)
+        mask = augmentation(mask, is_mask=True)
+        segmentation = torch.clamp(segmentation[:1, :, :] + (1-mask),0.,1.0)
+        segmentation = torch.cat([segmentation, 1-segmentation], dim=0)
+        if process_device != sample[0].device:
+            return input_img.to(sample[0].device), segmentation.to(sample[0].device), mask.to(sample[0].device)
+        else:
+            return input_img, segmentation, mask
+
+
 class RR2013Ch2():
-    # @staticmethod
-    # def create_alphabet():
-    #     symbol_map = defaultdict(lambda: 1)
-    #     symbol_map[" "] = 0
-    #     base = max((symbol_map.values())) + 1
-    #     symbol_map.update({c: n + base for n, c in enumerate(string.ascii_lowercase)})
-    #     symbol_map.update({c: n + base for n, c in enumerate(string.ascii_uppercase)})
-    #     base = max((symbol_map.values())) + 1
-    #     symbol_map.update({c: n + base for n, c in enumerate(string.digits)})
-    #     return symbol_map
 
     def __init__(self, train=True, return_char_gt=False, return_mask=True,
                  reduce_img_size=True,
@@ -158,7 +184,7 @@ class RR2013Ch2():
             results.append(mask)
         return results
 
-    def reduce_size(self, sample_list):
+    def change_size(self, sample_list):
         old_width = sample_list[0].size(-1)
         old_height = sample_list[0].size(-2)
 
@@ -190,7 +216,7 @@ class RR2013Ch2():
             results=self.construct_item(item)
         if results[1].size(0) == 1 and results[1].dtype==torch.float32:
             results[1] = torch.cat([1-results[1],results[1]],dim=0)
-        return self.reduce_size(results)
+        return self.change_size(results)
 
     def __len__(self):
         return len(self.ids)
