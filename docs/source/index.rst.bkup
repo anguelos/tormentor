@@ -1,0 +1,30 @@
+:github_url: https://github.com/anguelos/tormentor
+
+Tormentor Documentation
+====================
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Get Started
+
+   introduction
+   installation
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Package Reference
+
+   tormentor
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Community
+
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`

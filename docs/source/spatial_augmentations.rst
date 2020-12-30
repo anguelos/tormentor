@@ -15,5 +15,7 @@ Spatial Augmentations
 .. autoclass:: Translate
 .. autoclass:: ScaleTranslate
 .. autoclass:: Flip
-.. autoclass:: RemoveRectangle
 .. autoclass:: ElasticTransform
+.. autoclass:: ElasticTransform
+.. autoclass:: Wrap
+.. autoclass:: Shred
