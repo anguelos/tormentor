@@ -17,7 +17,7 @@
 import os
 import sys
 
-import tormentor
+#import tormentor
 
 import sphinx_gallery
 import sphinx_rtd_theme
