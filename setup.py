@@ -9,9 +9,9 @@ setup(
     author='Anguelos Nicolaou',
     author_email='anguelos.nicolaou@gmail.com',
     url='https://github.com/anguelos/tormentor',
-    description="A very easy to use argument parser.",
+    description="Image Data Augmentation with Pytorch and Kornia",
     long_description_content_type="text/markdown",
-    long_description=open('README.md').read(),
+    long_description=open('README.rst').read(),
     download_url='https://github.com/anguelos/tormentor/archive/0.1.0.tar.gz',
     keywords=["pytorch", "augmentation", "kornia", "image segmentation", "computer vision"],
     classifiers=[
@@ -20,5 +20,5 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Topic :: Scientific/Engineering"],
-    install_requires=["torch", "matplotlib", "torchvision", "fargv", "kornia"],
+    install_requires=["torch", "matplotlib", "torchvision", "fargv", "kornia>=0.3.2"],
 )

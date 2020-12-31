@@ -8,6 +8,24 @@
 
 pyTORch augMENTOR
 -----------------
+
+
+.. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
+    :target: https://opensource.org/licenses/Apache-2.0
+
+.. image:: https://badge.fury.io/py/tormentor.svg
+    :target: https://badge.fury.io/py/tormentor
+
+.. image:: https://codecov.io/gh/anguelos/tormentor/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/anguelos/tormentor/
+    :alt: Testing Coverage
+
+.. image:: https://readthedocs.org/projects/tormentor/badge/?version=latest
+    :target: https://tormentor.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+
+
 Image data augmentation with pytorch
 
 Instalation:
