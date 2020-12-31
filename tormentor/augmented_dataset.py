@@ -3,14 +3,41 @@ import time
 from typing import Type
 import torch
 from matplotlib import pyplot as plt
-
-
 from .base_augmentation import DeterministicImageAugmentation
+from .factory import AugmentationFactory
 
 
 class AugmentedDs(torch.utils.data.Dataset):
-    @classmethod
-    def augment_sample(cls, *args, augmentation, process_device: torch.device):
+    r"""Wraps a Dataset in order to create an augmented dataset.
+
+    .. code-block :: python
+
+        import torchvision
+        import tormentor
+        import torch
+
+        def augment_sample(sample, aug, device):
+            print("Augmenting:",len(sample))
+            return (aug(sample[0]).to(device),) + sample[1:]
+
+        transform = torchvision.transforms.ToTensor()
+        ds = torchvision.datasets.CIFAR10(download=True,train=False,root="/tmp", transform=transform)
+        dl = torch.utils.data.DataLoader(ds, batch_size=5)
+
+        aug_ds = tormentor.AugmentedDs(ds, tormentor.RandomRotate, computation_device="cpu",augment_sample_function=augment_sample)
+        aug_dl = torch.utils.data.DataLoader(aug_ds, batch_size=5)
+
+        batch = next(iter(dl))
+        aug_batch = next(iter(aug_dl))
+
+        fig, ax = plt.subplots(2,1)
+        ax[0].imshow(torchvision.utils.make_grid(batch[0]).numpy().transpose(1,2,0))
+        ax[1].imshow(torchvision.utils.make_grid(aug_batch[0]).numpy().transpose(1,2,0))
+        plt.show()
+    """
+
+    @staticmethod
+    def augment_sample(args, augmentation:DeterministicImageAugmentation, device: torch.device):
         input_img = args[0]
         width = input_img.size(-2)
         height = input_img.size(-1)
@@ -22,34 +49,39 @@ class AugmentedDs(torch.utils.data.Dataset):
                 augmentated_data.append(datum)
         return augmentated_data
 
-
-    def __init__(self, ds, exemplar_augmentation, add_mask=False, device="cpu", augment_sample_function=None):
+    def __init__(self, ds, augmentation_factory:AugmentationFactory, add_mask=False, computation_device="cpu", output_device=None, augment_sample_function=None):
         self.ds = ds
-        self._exemplar_augmentation = exemplar_augmentation
+        self.augmentation_factory = augmentation_factory
         self.add_mask = add_mask
-        self.device = device
+        self.computation_device = computation_device
+        self.output_device = output_device
         if augment_sample_function is None:
-            self.augment_sample_function = type(self).augment_sample
+            self.augment_sample_function = AugmentedDs.augment_sample
         else:
             self.augment_sample_function = augment_sample_function
 
     def new_augmentation(self):
-        return self._exemplar_augmentation.like_me()
+        return self.augmentation_factory()
 
     def __getitem__(self, item):
         sample = self.ds[item]
         if self.add_mask:
-            created_mask = torch.ones([1, input.size(-2), input.size(-1)], device=self.device)
+            created_mask = torch.ones([1, sample[0].size(-2), sample[0].size(-1)], device=self.computation_device)
             sample = tuple(sample) + (created_mask,)
-        return self.augment_sample_function(*sample, self.new_augmentation(), self.device)
+        augmentation = self.new_augmentation()
+        result = self.augment_sample_function(sample, augmentation, device=self.computation_device)
+        if self.output_device is not None and self.output_device != self.computation_device:
+            return [data.to(self.output_device) if isinstance(data, torch.Tensor) else data for data in result]
+        else:
+            return result
 
     def __len__(self):
         return len(self.ds)
 
 
 class AugmentedCocoDs(AugmentedDs):
-    def __init__(self, ds, exemplar_augmentation: Type[DeterministicImageAugmentation], device="cpu", add_mask=False):
-        super().__init__(ds=ds, exemplar_augmentation=exemplar_augmentation, add_mask=add_mask, device=device)
+    def __init__(self, ds, augmentation_factory: AugmentationFactory, computation_device="cpu",  output_device="cpu", add_mask=False):
+        super().__init__(ds=ds, augmentation_factory=augmentation_factory, add_mask=add_mask, computation_device=computation_device, output_device=output_device)
 
     @staticmethod
     def rle2mask(rle_counts, size):
@@ -75,7 +107,7 @@ class AugmentedCocoDs(AugmentedDs):
         return rle, size
 
     @classmethod
-    def augment_sample(cls, input, target, mask, augmentation, process_device):
+    def augment_sample(cls, input, target, mask, augmentation, device):
         point_cloud_x = []
         point_cloud_y = []
         n = 0
@@ -86,7 +118,7 @@ class AugmentedCocoDs(AugmentedDs):
                 object_start_end_pos.append(None)
                 object_mask = AugmentedCocoDs.rle2mask(coco_object["segmentation"]["counts"],
                                                 coco_object["segmentation"]["size"])
-                obj_mask_images.append(object_mask.to(process_device))
+                obj_mask_images.append(object_mask.to(device))
             else:
                 object_surfaces = []
                 for surface_n in range(len(coco_object["segmentation"])):
