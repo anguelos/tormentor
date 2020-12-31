@@ -19,6 +19,7 @@ sys.path.append(current_path)
 import os
 import sys
 
+import torch
 import tormentor
 
 import sphinx_gallery
@@ -85,3 +86,10 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3/', None),
+    'numpy': ('http://numpy.org/doc/stable/', None),
+    'torch': ('http://pytorch.org/docs/stable/', None),
+}
