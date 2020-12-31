@@ -1,11 +1,21 @@
 import torch
 
 from diamond_square import functional_diamond_square
-from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState
+from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState, StaticImageAugmentation
 from .random import Uniform, Bernoulli
 
 
 class Wrap(SpatialImageAugmentation):
+    r"""Augmentation Wrap.
+
+    This augmentation acts like many simultaneous elastic transforms with gaussian sigmas set at varius harmonics.
+
+    Distributions:
+        ``roughness``: Quantification of the local inconsistency of the distortion effect.
+        ``intensity``: Quantification of the intensity of the distortion effect.
+
+    .. image:: _static/example_images/Wrap.png
+    """
     roughness = Uniform(value_range=(.1, .7))
     intensity = Uniform(value_range=(.0, 1.))
 
@@ -29,30 +39,40 @@ class Wrap(SpatialImageAugmentation):
 
         return plasma_x, plasma_y
 
-    @staticmethod
-    def functional_sampling_field(sampling_field: SamplingField, plasma_x: torch.FloatTensor,
+    @classmethod
+    def functional_sampling_field(cls, sampling_field: SamplingField, plasma_x: torch.FloatTensor,
                                   plasma_y: torch.FloatTensor) -> SamplingField:
         field_x, field_y = sampling_field
         return field_x + plasma_x[:, :, :], field_y + plasma_y[:, :, :]
 
 
-class Shred(SpatialImageAugmentation):
+class Shred(StaticImageAugmentation):
+    r"""Augmentation Shred.
+
+
+    Distributions:
+        ``roughness``: Quantification of the local inconsistency of the distortion effect.
+        ``erase_percentile``: Quantification of the surface that will be erased.
+        ``inside``: If True
+
+    .. image:: _static/example_images/Wrap.png
+    """
     roughness = Uniform(value_range=(.4, .8))
     inside = Bernoulli(prob=.5)
     erase_percentile = Uniform(value_range=(.0, .5))
 
-    def generate_batch_state(self, sampling_tensors: SamplingField) -> SpatialAugmentationState:
-        batch_sz, width, height = sampling_tensors[0].size()
-        roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
+    def generate_batch_state(self, image_batch: torch.Tensor) -> SpatialAugmentationState:
+        batch_sz, _, width, height = image_batch.size()
+        roughness = type(self).roughness(batch_sz, device=image_batch.device)
         plasma_sz = (batch_sz, 1, width, height)
-        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=sampling_tensors[0].device)
-        inside = type(self).inside(batch_sz, device=sampling_tensors[0].device).float()
-        erase_percentile = type(self).erase_percentile(batch_sz, device=sampling_tensors[0].device)
+        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=image_batch.device)
+        inside = type(self).inside(batch_sz, device=image_batch.device).float()
+        erase_percentile = type(self).erase_percentile(batch_sz, device=image_batch.device)
         return plasma, inside, erase_percentile
 
-    @staticmethod
-    def functional_sampling_field(sampling_field: SamplingField, plasma: torch.FloatTensor, inside: torch.FloatTensor,
-                                  erase_percentile: torch.FloatTensor) -> SamplingField:
+    @classmethod
+    def functional_image(cls, image_batch: torch.Tensor, plasma: torch.FloatTensor, inside: torch.FloatTensor,
+                                  erase_percentile: torch.FloatTensor) -> torch.Tensor:
         inside = inside.view(-1, 1, 1, 1)
         erase_percentile = erase_percentile.view(-1, 1, 1, 1)
         plasma = inside * plasma + (1 - inside) * (1 - plasma)
@@ -61,5 +81,5 @@ class Shred(SpatialImageAugmentation):
         for n in range(plasma_pixels.size(0)):
             thresholds.append(torch.kthvalue(plasma_pixels[n], int(plasma_pixels.size(1) * erase_percentile[n]))[0])
         thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1).to(plasma.device)
-        erase = (plasma < thresholds) * 1000
-        return sampling_field[0] + erase[:,0,:,:], sampling_field[1] + erase[:,0,:,:]
+        erase = (plasma < thresholds).float()
+        return image_batch * (1 - erase)
