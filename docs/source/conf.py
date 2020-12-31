@@ -13,11 +13,13 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
+current_path = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
+sys.path.append(current_path)
 
 import os
 import sys
 
-#import tormentor
+import tormentor
 
 import sphinx_gallery
 import sphinx_rtd_theme
