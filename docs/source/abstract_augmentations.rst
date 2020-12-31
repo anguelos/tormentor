@@ -8,8 +8,10 @@ Abstract Augmentation Types
    :caption: Abstract Augmentations
 
 .. autoclass:: DeterministicImageAugmentation
+   :members:
+
+   .. automethod:: augment_image
+
 .. autoclass:: SpatialImageAugmentation
 .. autoclass:: StaticImageAugmentation
 .. autoclass:: ColorAugmentation
-.. autoclass:: AugmentationCascade
-.. autoclass:: AugmentationChoice

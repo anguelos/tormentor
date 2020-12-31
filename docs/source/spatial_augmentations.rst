@@ -16,6 +16,5 @@ Spatial Augmentations
 .. autoclass:: ScaleTranslate
 .. autoclass:: Flip
 .. autoclass:: ElasticTransform
-.. autoclass:: ElasticTransform
 .. autoclass:: Wrap
 .. autoclass:: Shred
