@@ -24,35 +24,20 @@ ds = [(torch.rand(3,image_height, image_width), 0) for _ in range(dataset_size)]
 dl = torch.utils.data.DataLoader(ds, batch_size=1)
 
 
-testable_augmentations = list(tormentor._leaf_augmentations)
+testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.Flip, tormentor.Invert, tormentor.PadTo, tormentor.PadCropTo, tormentor.CropTo})
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
 testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 
 
-
-def augment_batch(batch, aug, device):
-    return [aug(batch[0]).to(device)] + batch[1:]
-
-
-def augment_sample(sample, aug, device):
-    return (aug(sample[0]).to(device),) + sample[1:]
-
-
-aug_ds = tormentor.AugmentedDs(ds, tormentor.RandomRotate, computation_device="cpu",
-                               augment_sample_function=augment_sample)
-
-
-batch_aug_dl = tormentor.AugmentedDataLoader(dl, tormentor.RandomRotate, computation_device="cpu",
-                               augment_batch_function=augment_batch)
+aug_ds = tormentor.AugmentedDs(ds, tormentor.RandomRotate, computation_device="cpu")
+batch_aug_dl = tormentor.AugmentedDataLoader(dl, tormentor.RandomRotate, computation_device="cpu")
 sample_aug_dl = torch.utils.data.DataLoader(aug_ds, batch_size=1)
 
 
 @pytest.mark.parametrize("augmentation_cls", [cls for cls in testable_augmentations])
-def test_determinism(augmentation_cls):
-    aug_ds = tormentor.AugmentedDs(ds, tormentor.AugmentationFactory(augmentation_cls), computation_device="cpu",
-                                   augment_sample_function=augment_sample)
-    batch_aug_dl = tormentor.AugmentedDataLoader(dl, tormentor.AugmentationFactory(augmentation_cls), computation_device="cpu",
-                                                 augment_batch_function=augment_batch)
+def test_sample_batch(augmentation_cls):
+    aug_ds = tormentor.AugmentedDs(ds, tormentor.AugmentationFactory(augmentation_cls), computation_device="cpu")
+    batch_aug_dl = tormentor.AugmentedDataLoader(dl, tormentor.AugmentationFactory(augmentation_cls), computation_device="cpu")
     sample_aug_dl = torch.utils.data.DataLoader(aug_ds, batch_size=1)
 
     torch.manual_seed(0)
@@ -64,3 +49,5 @@ def test_determinism(augmentation_cls):
     per_sample = torch.cat([batch[0] for batch in sample_aug_dl])
     assert all_similar(per_batch, per_sample)
 
+    #testing __len__ for dataset and dataloader
+    assert len(batch_aug_dl) == len(sample_aug_dl) == len(aug_ds)

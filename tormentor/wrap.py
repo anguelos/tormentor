@@ -55,7 +55,7 @@ class Shred(StaticImageAugmentation):
         ``erase_percentile``: Quantification of the surface that will be erased.
         ``inside``: If True
 
-    .. image:: _static/example_images/Wrap.png
+    .. image:: _static/example_images/Shred.png
     """
     roughness = Uniform(value_range=(.4, .8))
     inside = Bernoulli(prob=.5)

@@ -31,13 +31,25 @@ class AugmentationFactory(torch.nn.Module):
         return self
 
 
-    def __init__(self, augmentation_cls):
-        assert issubclass(augmentation_cls,DeterministicImageAugmentation)
-        self.augmentation_cls = augmentation_cls
+    def __init__(self, augmentation_cls_or_factory):
+        r"""Creates a new factory.
+
+        Args:
+            augmentation_cls_or_factory: Either a subclass ``DeterministicImageAugmentation`` in which the factory will
+            wrap this augmentation , or another ``AugmentationFactory`` in which case the constructor acts like a copy
+            constructor.
+        """
+        if isinstance(augmentation_cls_or_factory, AugmentationFactory):
+            self.augmentation_cls = augmentation_cls_or_factory.augmentation_cls
+        elif isinstance(augmentation_cls_or_factory, type) and issubclass(augmentation_cls_or_factory, DeterministicImageAugmentation):
+            self.augmentation_cls = augmentation_cls_or_factory
+        else:
+            print(repr(augmentation_cls_or_factory))
+            raise ValueError()
 
 
     def __or__(self, other):
-        if issubclass(other, DeterministicImageAugmentation):
+        if isinstance(other, type) and issubclass(other, DeterministicImageAugmentation):
             other_augmentation_cls = other
         elif isinstance(other, AugmentationFactory):
             other_augmentation_cls = other.augmentation_cls
@@ -63,10 +75,10 @@ class AugmentationFactory(torch.nn.Module):
     def __xor__(self, other):
         return AugmentationFactory._choose(self, other)
 
-    def __and__(self, other):
+    def __or__(self, other):
         return AugmentationFactory._concat(self, other)
 
-    def __and__(self, other):
+    def __ror__(self, other):
         return AugmentationFactory._concat(other, self)
 
     @staticmethod
@@ -140,7 +152,7 @@ class AugmentationFactory(torch.nn.Module):
         elif issubclass(self.augmentation_cls, AugmentationCascade):
             children = [repr(AugmentationFactory(aug_cls)) for aug_cls in self.augmentation_cls.augmentation_list]
             children = reversed(children)
-            return "(" + " & ".join(children) + ")"
+            return "(" + " | ".join(children) + ")"
         else:
             dist_str = ", ".join([f"{name}={str(dist)}" for name, dist in self.get_distributions().items()])
             return f"Random{self.augmentation_cls.augmentation_type().__qualname__}.custom({dist_str})"

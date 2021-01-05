@@ -38,13 +38,13 @@ def __xor__aug(self, other):
     return AugmentationFactory(self).__xor__(other)
 
 
-def __and__aug(self, other):
-    return AugmentationFactory(self).__and__(other)
+def __pipe__aug(self, other):
+    return AugmentationFactory(self).__or__(other)
 
 
 for aug in _leaf_augmentations:
     aug.__xor__ = types.MethodType(__xor__aug, aug)
-    aug.__and__ = types.MethodType(__and__aug, aug)
+    aug.__or__ = types.MethodType(__pipe__aug, aug)
 
 factory_dict = {f"Random{aug.__name__}": AugmentationFactory(aug) for aug in _leaf_augmentations}
 all_factory_names = list(factory_dict.keys())

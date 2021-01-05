@@ -38,10 +38,13 @@ class Invert(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, do_inversion: torch.FloatTensor) -> torch.FloatTensor:
-        do_inversion = do_inversion.view(-1, 1, 1)
+        do_inversion = do_inversion.view(-1, 1, 1, 1)
+        #print(do_inversion)
         hsv_batch = K.color.rgb_to_hsv(batch)
-        hsv_batch[:, 0, :, :] = (1 - hsv_batch[:, 0, :, :]) * do_inversion + hsv_batch[:, 0, :, :] * (1 - do_inversion)
-        return K.color.hsv_to_rgb(hsv_batch)
+        hsv_batch[:, 2:, :, :] = (1 - hsv_batch[:, 2:, :, :]) * do_inversion + hsv_batch[:, 2:, :, :] * (1 - do_inversion)
+        out_batch = K.color.hsv_to_rgb(hsv_batch)
+        print((batch==out_batch).sum())
+        return out_batch
 
 
 class Brightness(ColorAugmentation):
@@ -57,7 +60,7 @@ class Brightness(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
-        return K.color.adjust_brightness(batch, brightness)
+        return K.adjust_brightness(batch, brightness)
 
 
 class Saturation(ColorAugmentation):
@@ -73,7 +76,7 @@ class Saturation(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, saturation: torch.FloatTensor) -> torch.FloatTensor:
-        return K.color.adjust_saturation(batch, saturation)
+        return K.adjust_saturation(batch, saturation)
 
 
 class Contrast(ColorAugmentation):
@@ -90,7 +93,7 @@ class Contrast(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, contrast: torch.FloatTensor) -> torch.FloatTensor:
         # contrast = contrast.view(-1, 1, 1, 1)
-        return K.color.adjust_saturation(batch, contrast)
+        return K.adjust_saturation(batch, contrast)
 
 
 class Hue(ColorAugmentation):
@@ -107,7 +110,7 @@ class Hue(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, hue: torch.FloatTensor) -> torch.FloatTensor:
         # hue = hue.view(-1, 1, 1, 1)
-        return K.color.adjust_hue(batch, hue)
+        return K.adjust_hue(batch, hue)
 
 
 class ColorJitter(ColorAugmentation):
@@ -130,10 +133,10 @@ class ColorJitter(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, hue: torch.FloatTensor, contrast: torch.FloatTensor,
                          saturation: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
-        batch = K.color.adjust_hue(batch, hue)
-        batch = K.color.adjust_saturation(batch, saturation)
-        batch = K.color.adjust_brightness(batch, brightness)
-        batch = K.color.adjust_contrast(batch, contrast)
+        batch = K.adjust_hue(batch, hue)
+        batch = K.adjust_saturation(batch, saturation)
+        batch = K.adjust_brightness(batch, brightness)
+        batch = K.adjust_contrast(batch, contrast)
         return batch
 
 
@@ -143,13 +146,15 @@ class PlasmaBrightness(ColorAugmentation):
     .. image:: _static/example_images/PlasmaBrightness.png
    """
     roughness = Uniform(value_range=(.1, .7))
+    intencity = Uniform(value_range=(0., 1.))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
         plasma_sz = (batch_sz, 1, height, width)
+        intensity = type(self).intencity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
         brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
-        return brightness_map,
+        return brightness_map * intensity,
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness_map: torch.FloatTensor) -> torch.FloatTensor:
@@ -164,18 +169,72 @@ class PlasmaRgbBrightness(ColorAugmentation):
 
    """
     roughness = Uniform(value_range=(.1, .7))
+    intensity = Uniform(value_range=(0., 1.))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
         plasma_sz = (batch_sz, 3, height, width)
+        intensity = type(self).intensity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
         brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
-        return brightness_map,
+        return brightness_map * intensity,
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness_map: torch.FloatTensor) -> torch.FloatTensor:
         # brightness = brightness.view(-1, 1, 1, 1)
         return torch.clamp(batch + brightness_map, 0, 1)
+
+
+class PlasmaLinearColor(ColorAugmentation):
+    r"""Changes the saturation of the image.
+
+    .. image:: _static/example_images/PlasmaLinearColor.png
+
+   """
+    roughness = Uniform(value_range=(.1, .4))
+    alpha_range = Uniform(value_range=(.0, 1.))
+    alpha_mean = Uniform(value_range=(.0, 1.))
+    beta_range = Uniform(value_range=(0., 1.))
+    beta_mean = Uniform(value_range=(0., 1.))
+
+    def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        batch_sz, channels, height, width = batch_tensor.size()
+        roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
+        plasma_sz = (batch_sz, 1, height, width)
+        alpha_range = type(self).alpha_range(batch_sz, device=batch_tensor.device).view(-1,1,1,1)
+        alpha_mean = type(self).alpha_mean(batch_sz, device=batch_tensor.device).view(-1,1,1,1)
+        beta_range = type(self).beta_range(batch_sz, device=batch_tensor.device).view(-1,1,1,1)
+        beta_mean = type(self).beta_mean(batch_sz, device=batch_tensor.device).view(-1,1,1,1)
+
+
+        alpha_plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
+        #print("RndAlpha:",alpha_plasma.min().item(),alpha_plasma.max().item())
+
+
+        alpha_plasma = (alpha_plasma * alpha_range) + (1-alpha_range)  * alpha_mean
+        #print("RndAlpha2:",alpha_plasma.min().item(),alpha_plasma.max().item())
+
+        beta_plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
+        #print("RndBeta:",beta_plasma.min().item(),beta_plasma.max().item())
+        beta_plasma = (beta_plasma * beta_range) + (1-beta_range) * beta_mean + beta_range * .5
+        #print("RndBeta2:",beta_plasma.min().item(),beta_plasma.max().item())
+
+        #beta_available = (1 - alpha_plasma)
+
+        #beta_alpha = beta_available * beta_alpha
+        #beta_beta = (beta_available - beta_alpha) * beta_beta
+
+        #beta_plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
+        #beta_plasma = beta_plasma * beta_alpha + beta_beta
+        #print ("Ranges:",(alpha_plasma+beta_plasma).min().item(),(alpha_plasma+beta_plasma).max().item())
+        plasma_sum = (alpha_plasma+beta_plasma)
+        alpha_plasmam, beta_plasma = (alpha_plasma/plasma_sum,beta_plasma/plasma_sum)
+        return alpha_plasma, beta_plasma,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, alpha_plasma: torch.FloatTensor, beta_plasma: torch.FloatTensor) -> torch.FloatTensor:
+        scaled_color_img = batch * alpha_plasma + beta_plasma
+        return torch.clamp(scaled_color_img, 0, 1)
 
 
 class PlasmaContrast(ColorAugmentation):
@@ -204,19 +263,36 @@ class PlasmaShadow(ColorAugmentation):
     .. image:: _static/example_images/PlasmaShadow.png
    """
     roughness = Uniform(value_range=(.1, .7))
-    shade_intencity = Uniform(value_range=(-1.0, .0))
+    shade_intensity = Uniform(value_range=(-1.0, .0))
     shade_quantity = Uniform(value_range=(0.0, 1.0))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
-        shade_intencity = type(self).shade_intencity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
+        shade_intensity = type(self).shade_intensity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
         shade_quantity = type(self).shade_quantity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
         plasma_sz = (batch_sz, 1, height, width)
         shade_map = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
-        shade_map = (shade_map < shade_quantity).float() * shade_intencity
+        shade_map = (shade_map < shade_quantity).float() * shade_intensity
         return shade_map,
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, shade_map: torch.FloatTensor) -> torch.FloatTensor:
         return torch.clamp(batch + shade_map, 0, 1)
+
+
+class GaussianAdditiveNoise(ColorAugmentation):
+    r"""Lowers   the brightness of the image over a random mask.
+
+    .. image:: _static/example_images/PlasmaShadow.png
+   """
+    noise = Normal(mean=0, deviation=.2)
+
+    def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        tensor_sz = batch_tensor.size()
+        noise = type(self).noise(tensor_sz, device=batch_tensor.device)
+        return noise,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, noise: torch.FloatTensor) -> torch.FloatTensor:
+        return torch.clamp(batch + noise, 0, 1)
