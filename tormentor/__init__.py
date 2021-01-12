@@ -21,7 +21,7 @@ from .random import Uniform, Bernoulli, Distribution, Categorical
 from .resizing_augmentation import *
 from .spatial_augmentations import *
 # from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
-from .util import debug_pattern
+from .util import debug_pattern, render_singleline_text
 from .wrap import Wrap, Shred
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
@@ -53,6 +53,7 @@ locals().update(factory_dict)
 _all_augmentation_names = [aug.__name__ for aug in _all_augmentations]
 
 __all__ = [
+              "render_singleline_text",
               "_abstract_augmentations",
               "_all_augmentations",
               "_leaf_augmentations",

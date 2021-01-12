@@ -39,6 +39,7 @@ class AugmentationFactory(torch.nn.Module):
             wrap this augmentation , or another ``AugmentationFactory`` in which case the constructor acts like a copy
             constructor.
         """
+        super().__init__()
         if isinstance(augmentation_cls_or_factory, AugmentationFactory):
             self.augmentation_cls = augmentation_cls_or_factory.augmentation_cls
         elif isinstance(augmentation_cls_or_factory, type) and issubclass(augmentation_cls_or_factory, DeterministicImageAugmentation):
@@ -123,7 +124,7 @@ class AugmentationFactory(torch.nn.Module):
 
         if isinstance(left, type) and issubclass(left, DeterministicImageAugmentation):
             left_augmentation_cls = left
-        elif isinstance(right, AugmentationFactory):
+        elif isinstance(left, AugmentationFactory):
             left_augmentation_cls = left.augmentation_cls
         else:
             raise ValueError("operator only defined for augmentations or their factories")

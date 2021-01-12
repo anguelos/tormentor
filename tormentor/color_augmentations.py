@@ -146,13 +146,13 @@ class PlasmaBrightness(ColorAugmentation):
     .. image:: _static/example_images/PlasmaBrightness.png
    """
     roughness = Uniform(value_range=(.1, .7))
-    intencity = Uniform(value_range=(0., 1.))
+    intensity = Uniform(value_range=(0., 1.))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         batch_sz, channels, height, width = batch_tensor.size()
         roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
         plasma_sz = (batch_sz, 1, height, width)
-        intensity = type(self).intencity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
+        intensity = type(self).intensity(batch_sz, device=batch_tensor.device).view(-1, 1, 1, 1)
         brightness_map = 2 * functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device) - 1
         return brightness_map * intensity,
 

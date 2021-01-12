@@ -1,11 +1,15 @@
 import kornia as K
 import torch
 
-from .base_augmentation import SamplingField, SpatialAugmentationState, DeterministicImageAugmentation
-from .random import Constant, Uniform
+from .base_augmentation import SamplingField, SpatialAugmentationState, DeterministicImageAugmentation, AugmentationCascade, SpatialImageAugmentation
+from .random import Constant, Uniform, Categorical
 
 
-class ResizingAugmentation(DeterministicImageAugmentation):
+class ResizingAugmentation(SpatialImageAugmentation):
+    r"""Abstract augmentation that resizes inputs to a specific size.
+
+    Depending on the specific augmentation, the output is not guarantied to have the desired size.
+    """
     out_width = Constant(224)
     out_height = Constant(224)
 
@@ -50,8 +54,10 @@ class ResizingAugmentation(DeterministicImageAugmentation):
 
 
 class PadTo(ResizingAugmentation):
-    """Guaranties a minimum size by padding.
+    r"""Grows an Image up to a specific size by padding.
 
+    If the image is already larger than the given size on each dimension, the dimension size won't change.
+    Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
     """
     center_x = Uniform((0.0, 1.0))
     center_y = Uniform((0.0, 1.0))
@@ -113,6 +119,12 @@ class PadTo(ResizingAugmentation):
 
 
 class CropTo(ResizingAugmentation):
+    r"""Shrinks an Image down to a specific size by cropping.
+
+    If the image is already smaller than the given size on each dimension, the dimension size won't change.
+    Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
+    """
+
     center_x = Uniform((0.0, 1.0))
     center_y = Uniform((0.0, 1.0))
 
@@ -166,3 +178,25 @@ class CropTo(ResizingAugmentation):
             res_tensors.append(batch[n: n + 1, :, top: bottom, left: right])
         res = torch.cat(res_tensors, dim=0)
         return res
+
+
+class PadCropTo(PadTo, CropTo):
+    r"""Resizes Image to a specific size.
+
+    Will zero-pad or crop as needed to meet the size.
+    Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
+    """
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+        return CropTo.generate_batch_state(self, batch_tensor) + PadTo.generate_batch_state(self, batch_tensor)
+
+    @classmethod
+    def functional_image(cls, batch: torch.Tensor, ltrb_crops: torch.Tensor, ltrb_pads: torch.Tensor) -> torch.Tensor:
+        #  This simple cascade works only because a dimension can either need padding or cropping but never both.
+        cropped_batch = CropTo.functional_image(batch, ltrb_crops)
+        return PadTo.functional_image(cropped_batch, ltrb_pads)
+
+    @classmethod
+    def functional_sampling_field(cls, coords: SamplingField, ltrb_crops: torch.Tensor, ltrb_pads: torch.Tensor) -> SamplingField:
+        #  This simple cascade works only because a dimension can either need padding or cropping but never both.
+        cropped_coords = CropTo.functional_sampling_field(coords, ltrb_crops)
+        return PadTo.functional_sampling_field(cropped_coords, ltrb_pads)

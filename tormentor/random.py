@@ -27,6 +27,17 @@ class Distribution(torch.nn.Module):
         #this should be tested
         return type(self) is type(other) and self.get_distribution_parameters() == other.get_distribution_parameters()
 
+    @property
+    def device(self):
+        raise NotImplementedError()
+
+    def to(self, device):
+        if device != self.device:
+            super().to(device)
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.get_distribution_parameters().items())))
+
 
 class Uniform(Distribution):
     def __init__(self, value_range: TupleRange = (0.0, 1.0), do_rsample=False):
@@ -47,6 +58,7 @@ class Uniform(Distribution):
 
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
+        self.to(device)
         if self.do_rsample:
             raise NotImplemented
         else:
@@ -62,6 +74,10 @@ class Uniform(Distribution):
     def get_distribution_parameters(self):
         return {"min": self.min, "max": self.max}
 
+    @property
+    def device(self):
+        return self.min.device
+
 
 class Constant(Distribution):
     def __init__(self, value: float, do_rsample=False):
@@ -73,6 +89,7 @@ class Constant(Distribution):
         return f"{self.__class__.__qualname__}(value={value_str})"
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
+        self.to(device)
         if self.do_rsample:
             raise NotImplemented
         else:
@@ -88,6 +105,9 @@ class Constant(Distribution):
     def get_distribution_parameters(self):
         return {"value": self.value}
 
+    @property
+    def device(self):
+        return self.value.device
 
 class Bernoulli(Distribution):
     def __init__(self, prob: float = .5, do_rsample: object = False) -> object:
@@ -96,6 +116,7 @@ class Bernoulli(Distribution):
         self.distribution = torch.distributions.Bernoulli(probs=self.prob)
 
     def forward(self, size: TensorSize = 1, device="cpu"):
+        self.to(device)
         if self.do_rsample:
             raise NotImplemented
         else:
@@ -121,6 +142,9 @@ class Bernoulli(Distribution):
     def get_distribution_parameters(self):
         return {"prob": self.prob}
 
+    @property
+    def device(self):
+        return self.prob.device
 
 class Categorical(Distribution):
     def __init__(self, n_categories: int = 0, probs=(), do_rsample=False):
@@ -135,6 +159,7 @@ class Categorical(Distribution):
         self.distribution = torch.distributions.Categorical(probs=self.probs)
 
     def forward(self, size: TensorSize = 1, device="cpu"):
+        self.to(device)
         if self.do_rsample:
             raise NotImplemented
         else:
@@ -160,6 +185,10 @@ class Categorical(Distribution):
     def get_distribution_parameters(self) -> dict:
         return {"probs": self.probs}
 
+    @property
+    def device(self):
+        return self.probs.device
+
 
 class Normal(Distribution):
     def __init__(self, mean=0.0, deviation=1.0, do_rsample=False):
@@ -169,6 +198,7 @@ class Normal(Distribution):
         self.distribution = torch.distributions.Normal(loc=self.mean, scale=self.deviation)
 
     def forward(self, size: TensorSize = 1, device="cpu"):
+        self.to(device)
         if not hasattr(size, "__getitem__"):
             size = [size]
         if self.do_rsample:
@@ -181,10 +211,14 @@ class Normal(Distribution):
         params = f"mean={self.mean.item()}, deviation={self.deviation.item()}"
         return f"{name}({params}, do_rsample={self.do_rsample})"
 
-    def copy(self, do_rsample):
+    def copy(self, do_rsample=None):
         if do_rsample is None:
             do_rsample = self.do_rsample
-        return Normal(probs=tuple(self.probs.tolist()), do_rsample=do_rsample)
+        return Normal(mean=self.mean, deviation=self.deviation, do_rsample=do_rsample)
 
     def get_distribution_parameters(self) -> dict:
-        return {"probs": self.probs}
+        return {"mean": self.mean, "deviation": self.deviation}
+
+    @property
+    def device(self):
+        return self.mean.device
