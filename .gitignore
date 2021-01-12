@@ -1,2 +1,5 @@
 *.pyc
 docs/source/_static/example_images/*png
+docs/build/**
+.pytest_cache/**
+
