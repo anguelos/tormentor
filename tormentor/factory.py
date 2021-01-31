@@ -1,8 +1,13 @@
+from typing import Any
+
 import torch
 from .base_augmentation import DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
+from .resizing_augmentation import ResizingAugmentation, PadCropTo
 
+from torch import Tensor
+from typing import Iterator, Tuple
 
-class AugmentationFactory(torch.nn.Module):
+class AugmentationFactory(object):
     """Class that wraps augmentation classes
 
     Each augmentation type is supposed to be immutable so changing the random distributions of it is realised through
@@ -22,13 +27,34 @@ class AugmentationFactory(torch.nn.Module):
         # wraps DeterministicImageAugmentation classmethod
         return self.augmentation_cls.get_distributions(copy=copy)
 
-
     def override_distributions(self, **kwargs):
         # wraps DeterministicImageAugmentation classmethod
         # but mutates self
         new_augmentation_cls = self.augmentation_cls.override_distributions(**kwargs)
         self.augmentation_cls = new_augmentation_cls
         return self
+
+    def new_size(self, width: int, height: int, requires_grad=False, resize_with=PadCropTo):
+        r"""Creates a new factory that resizes the existing outputs.
+
+        Args:
+            width: The desired input width
+            height: The desired input height
+            requires_grad: Is the new augmentation learnable?
+            resize_with: If the encapsulated augmentation is not resizing, a cascade with this augmentation will be used
+            to resize
+
+        Returns:
+            A new factory containing a augmentation class that will be resizing to a specific size
+
+        """
+        if isinstance(self.augmentation_cls, ResizingAugmentation):
+            new_augmentation_cls = self.augmentation_cls.new_size(width=width, height=height,
+                                                                   requires_grad=requires_grad)
+            return AugmentationFactory(new_augmentation_cls)
+        else:
+            resize_augmentation_cls = resize_with.new_size(width=width, height=height, requires_grad=requires_grad)
+            return AugmentationFactory._concat(self.augmentation_cls, resize_augmentation_cls)
 
 
     def __init__(self, augmentation_cls_or_factory):
@@ -47,7 +73,6 @@ class AugmentationFactory(torch.nn.Module):
         else:
             print(repr(augmentation_cls_or_factory))
             raise ValueError()
-
 
     def __or__(self, other):
         if isinstance(other, type) and issubclass(other, DeterministicImageAugmentation):
@@ -110,8 +135,6 @@ class AugmentationFactory(torch.nn.Module):
 
         choice = AugmentationChoice.create(augmentation_list=left_augmentation_cls_list + right_augmentation_cls_list)
         return AugmentationFactory(choice)
-
-
 
     @staticmethod
     def _concat(left, right):
