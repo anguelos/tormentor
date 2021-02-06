@@ -49,8 +49,8 @@ class ResizingAugmentation(SpatialImageAugmentation):
         state = self.generate_batch_state(coords[0].unsqueeze(dim=1))
         return type(self).functional_sampling_field(*((coords,) + state))
 
-    def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
-        return self.forward_img(X)
+    def forward_mask(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward_img(x)
 
 
 class PadTo(ResizingAugmentation):
@@ -180,14 +180,21 @@ class CropTo(ResizingAugmentation):
         return res
 
 
-class PadCropTo(PadTo, CropTo):
+class PadCropTo(ResizingAugmentation):
     r"""Resizes Image to a specific size.
 
     Will zero-pad or crop as needed to meet the size.
     Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
     """
+
+    center_x = Uniform((0.0, 1.0))
+    center_y = Uniform((0.0, 1.0))
+
     def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
-        return CropTo.generate_batch_state(self, batch_tensor) + PadTo.generate_batch_state(self, batch_tensor)
+        center_x = type(self).center_x(batch_tensor.size(0))
+        center_y = type(self).center_y(batch_tensor.size(0))
+        return center_x, center_y
+
 
     @classmethod
     def functional_image(cls, batch: torch.Tensor, ltrb_crops: torch.Tensor, ltrb_pads: torch.Tensor) -> torch.Tensor:

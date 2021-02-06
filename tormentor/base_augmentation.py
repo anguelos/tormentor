@@ -128,6 +128,31 @@ def apply_sampling_field(input_img: torch.Tensor, coords: SamplingField):
         return sampled_batch
 
 
+class AugmentationAutograd(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input_tensor, random_parametrers):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the output. ctx is a context object that can be used
+        to stash information for backward computation. You can cache arbitrary
+        objects for use in the backward pass using the ctx.save_for_backward method.
+        """
+        ctx.save_for_backward(input)
+        return input.clamp(min=0)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the loss
+        with respect to the output, and we need to compute the gradient of the loss
+        with respect to the input.
+        """
+        input, = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        grad_input[input < 0] = 0
+        return grad_input
+
+
 class DeterministicImageAugmentation(object):
     """Deterministic augmentation functor and its factory.
 
@@ -712,6 +737,27 @@ class AugmentationCascade(DeterministicImageAugmentation):
             aug_name = f"{contained_augmentation.__qualname__}{n}"
             res.update({f"{aug_name}: {k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
         return res
+
+
+class Identity(DeterministicImageAugmentation):
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+        return ()
+
+    def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
+        return coords
+
+    def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
+        return bboxes
+
+    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        return batch_tensor
+
+    def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
+        return batch_tensor
+
+    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
+                           compute_img: bool) -> PointCloudsImages:
+        return pcl
 
 
 class AugmentationChoice(DeterministicImageAugmentation):

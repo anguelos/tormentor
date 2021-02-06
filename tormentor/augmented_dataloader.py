@@ -34,28 +34,30 @@ class AugmentedDataLoader(torch.utils.data.DataLoader):
 
     @staticmethod
     def augment_batch(batch: Tensors, augmentation: DeterministicImageAugmentation, process_device: torch.device):
-        input_imgs, segmentations, masks = batch
-        if process_device != batch[0].device:
-            input_imgs = input_imgs.to(process_device)
-            segmentations = segmentations.to(process_device)
-            masks = masks.to(process_device)
+        #input_imgs, segmentations, masks = batch
+        batch = [tensor.to(process_device) for tensor in batch]
+        input_imgs = batch[0]
+        img_size = input_imgs.size()
+        mask_size = (img_size[0], 1, img_size[2], img_size[3])
+        batch_sz, nb_channels, width, height = input_imgs.size()
+        augmented_batch = []
         with torch.no_grad():
-            input_imgs = augmentation(input_imgs)
-            segmentations = augmentation(segmentations, is_mask=True)
-            masks = augmentation(masks, is_mask=True)
-            segmentations = torch.clamp(segmentations[:, :1, :, :] + (1 - masks), 0., 1.0)
-            segmentations = torch.cat([segmentations, 1 - segmentations], dim=1)
-            if process_device != batch[0].device:
-                return input_imgs.to(batch[0].device), segmentations.to(batch[0].device), masks.to(batch[0].device)
-            else:
-                return input_imgs, segmentations, masks
+            for datum in batch:
+                if isinstance(datum, torch.Tensor) and datum.size() == img_size:
+                    augmented_batch.append(augmentation(datum))
+                elif isinstance(datum, torch.Tensor) and datum.size() == mask_size:
+                    augmented_batch.append(augmentation(datum, is_mask=True))
+                else:
+                    augmented_batch.append(datum)
+        return augmented_batch
 
     def __init__(self, dl: torch.utils.data.DataLoader, augmentation_factory: AugmentationFactory, computation_device: torch.device,
-                 augment_batch_function=None, output_device=None):
+                 augment_batch_function=None, output_device=None, add_mask=False):
         self.dl = dl
         self.augmentation_factory = augmentation_factory
         self.computation_device = computation_device
         self.output_device = output_device
+        self.add_mask = add_mask
         if augment_batch_function is None:
             self.augment_batch_function = AugmentedDataLoader.augment_batch
         else:
@@ -73,4 +75,8 @@ class AugmentedDataLoader(torch.utils.data.DataLoader):
         output_batch = self.augment_batch_function(next(self.iterator), augmentation, self.computation_device)
         if self.output_device is not None and self.output_device != self.computation_device:
             output_batch = output_batch.to(self.output_device)
+        if self.add_mask:
+            mask = torch.ones([output_batch.size(0), 1, output_batch.size(2), output_batch.size(3)])
+            mask = augmentation(mask)
+            output_batch = output_batch + (mask,)
         return output_batch

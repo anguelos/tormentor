@@ -14,7 +14,7 @@ import types
 from .augmented_dataloader import AugmentedDataLoader
 from .augmented_dataset import AugmentedDs, AugmentedCocoDs
 from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, \
-    AugmentationChoice, AugmentationCascade, create_sampling_field, apply_sampling_field
+    Identity, AugmentationChoice, AugmentationCascade, create_sampling_field, apply_sampling_field
 from .color_augmentations import *
 from .factory import AugmentationFactory
 from .random import Uniform, Bernoulli, Distribution, Categorical
