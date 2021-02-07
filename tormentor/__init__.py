@@ -23,6 +23,7 @@ from .spatial_augmentations import *
 # from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern, render_singleline_text
 from .wrap import Wrap, Shred
+from .version import __version__
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
 
@@ -52,23 +53,23 @@ locals().update(factory_dict)
 
 _all_augmentation_names = [aug.__name__ for aug in _all_augmentations]
 
-__all__ = [
-              "render_singleline_text",
-              "_abstract_augmentations",
-              "_all_augmentations",
-              "_leaf_augmentations",
-              "create_sampling_field",
-              "debug_pattern",
-              "Constant",
-              "Uniform",
-              "Bernoulli",
-              "Distribution",
-              "Categorical",
-              "AugmentationChoice",
-              "Scale",
-              "Rotate",
-              "DeterministicImageAugmentation",
-              "SpatialImageAugmentation",
-              "AugmentedDs",
-              "AugmentedCocoDs",
-              "reset_all_seeds"] + _all_augmentation_names + all_factory_names
+__all__ = ["__version__",
+           "render_singleline_text",
+           "_abstract_augmentations",
+           "_all_augmentations",
+           "_leaf_augmentations",
+           "create_sampling_field",
+           "debug_pattern",
+           "Constant",
+           "Uniform",
+           "Bernoulli",
+           "Distribution",
+           "Categorical",
+           "AugmentationChoice",
+           "Scale",
+           "Rotate",
+           "DeterministicImageAugmentation",
+           "SpatialImageAugmentation",
+           "AugmentedDs",
+           "AugmentedCocoDs",
+           "reset_all_seeds"] + _all_augmentation_names + all_factory_names

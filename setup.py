@@ -1,9 +1,15 @@
 #import setuptools
 from setuptools import setup, Extension
+from distutils.util import convert_path
+
+main_ns = {}
+ver_path = convert_path('tormentor/version.py')
+with open(ver_path) as ver_file:
+    exec(ver_file.read(), main_ns)
 
 setup(
     name='tormentor',
-    version='0.1.0',
+    version=main_ns['__version__'],
     packages=['tormentor', 'diamond_square'],
     license='MIT',
     author='Anguelos Nicolaou',
