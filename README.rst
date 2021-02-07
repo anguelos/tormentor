@@ -34,8 +34,9 @@ Instalation:
 Instaling current version with pip:
 
 .. code:: bash
-
-    pip3 install --user --upgrade git+https://github.com/anguelos/tormentor
+    
+    pip install tormentor
+    #pip3 install --user --upgrade git+https://github.com/anguelos/tormentor
 
 Use Cases:
 ==========
