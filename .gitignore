@@ -2,4 +2,8 @@
 docs/source/_static/example_images/*png
 docs/build/**
 .pytest_cache/**
+.cache/**
+.coverage
+.eggs/**
+.ipynb_checkpoints/**
 
