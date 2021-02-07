@@ -757,7 +757,10 @@ class Identity(DeterministicImageAugmentation):
 
     def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
                            compute_img: bool) -> PointCloudsImages:
-        return pcl
+        if compute_img:
+            return pcl, batch_tensor
+        else:
+            return pcl
 
 
 class AugmentationChoice(DeterministicImageAugmentation):

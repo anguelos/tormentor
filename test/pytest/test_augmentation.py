@@ -2,7 +2,6 @@ import pytest
 import torch
 import tormentor
 
-
 tormentor.DeterministicImageAugmentation.reset_all_seeds(global_seed=100)
 torch.manual_seed(0)
 
@@ -20,7 +19,6 @@ def all_similar(t1, t2):
 
 in_img = torch.rand(3, image_width, image_height)
 in_batch = in_img.unsqueeze(dim=0).repeat([batch_size, 1, 1, 1])
-
 
 testable_augmentations = list(tormentor._leaf_augmentations)
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
@@ -48,11 +46,11 @@ def test_determinism(augmentation_cls):
 
 # pytorch.rand is not deterministic across devices, when pytorch fixes this, this testcase will be enabled.
 ## This fails for plasma and composite augmentations
-#testable_augmentations = list(tormentor._leaf_augmentations)
-#testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
-#testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
-#@pytest.mark.parametrize("augmentation_cls", [cls for cls in testable_augmentations])
-#def test_cross_device_determinism(augmentation_cls):
+# testable_augmentations = list(tormentor._leaf_augmentations)
+# testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
+# testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
+# @pytest.mark.parametrize("augmentation_cls", [cls for cls in testable_augmentations])
+# def test_cross_device_determinism(augmentation_cls):
 #    aug = augmentation_cls()
 
 #    # Assert cpu_gpu per sample
@@ -65,7 +63,9 @@ def test_determinism(augmentation_cls):
 
 
 # any augmentation with a high probability of being an identity function should be removed
-testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.Flip, tormentor.Invert, tormentor.PadTo, tormentor.PadCropTo, tormentor.CropTo})
+testable_augmentations = list(
+    tormentor._leaf_augmentations - {tormentor.Flip, tormentor.Invert, tormentor.PadTo, tormentor.PadCropTo,
+                                     tormentor.CropTo, tormentor.Identity})
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
 testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 

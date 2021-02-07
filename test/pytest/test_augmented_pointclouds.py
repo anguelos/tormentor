@@ -42,6 +42,7 @@ def helper_render_pointcloud_to_channels(pc, width, height):
         img[n, int(pc[1][n].round()), int(pc[0][n].round())] = 1
     return img
 
+
 def helper_test_pointcoulds_as_images(augmentation_cls):
     pointcloud = helper_create_pointcloud(width, height, n_pointclusters)
     img = helper_render_pointcloud_to_channels(pointcloud, width, height)
@@ -70,7 +71,7 @@ def helper_test_pointcoulds_as_images(augmentation_cls):
             precise_x, precise_y = pointcloud[0][n], pointcloud[1][n]
             crude_x = torch.argmax(img[n, :, :].sum(dim=0)).item()
             crude_y = torch.argmax(img[n, :, :].sum(dim=1)).item()
-            #if tolerance < precise_x < width - tolerance and tolerance < precise_y < height - tolerance:
+            # if tolerance < precise_x < width - tolerance and tolerance < precise_y < height - tolerance:
             assert (crude_x - precise_x) ** 2 < tolerance ** 2
             assert (crude_y - precise_y) ** 2 < tolerance ** 2
 
@@ -83,13 +84,15 @@ def helper_test_pointcoulds_as_images(augmentation_cls):
                 assert (crude_x - precise_x) ** 2 < tolerance ** 2
                 assert (crude_y - precise_y) ** 2 < tolerance ** 2
 
-testable_augmentations = list(tormentor._leaf_augmentations - {tormentor.RemoveRectangle, tormentor.Shred,
-                                                               tormentor.CropTo, tormentor.PadTo, tormentor.CropTo, tormentor.PadCropTo,
-                                                               tormentor.ElasticTransform})
-#testable_augmentations += [tormentor.ElasticTransform.override_distributions(harmonic_smoothing=tormentor.Uniform((1., 20.)))]
+
+inaplicable_augmentations = {tormentor.RemoveRectangle, tormentor.Shred,
+                             tormentor.CropTo, tormentor.PadTo, tormentor.CropTo, tormentor.PadCropTo,
+                             tormentor.ElasticTransform, tormentor.Identity}
+testable_augmentations = list(tormentor._leaf_augmentations - inaplicable_augmentations)
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
 testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 
-@pytest.mark.parametrize("augmentation_cls",[cls for cls in testable_augmentations])
+
+@pytest.mark.parametrize("augmentation_cls", [cls for cls in testable_augmentations])
 def test_augmentation_pointcloud(augmentation_cls):
     helper_test_pointcoulds_as_images(augmentation_cls)

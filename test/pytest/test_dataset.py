@@ -51,3 +51,13 @@ def test_sample_batch(augmentation_cls):
 
     #testing __len__ for dataset and dataloader
     assert len(batch_aug_dl) == len(sample_aug_dl) == len(aug_ds)
+
+@pytest.mark.parametrize("augmentation_cls", [cls for cls in testable_augmentations])
+def test_batch_size(augmentation_cls):
+    dl = torch.utils.data.DataLoader(ds, batch_size=10)
+    batch_aug_dl = tormentor.AugmentedDataLoader(dl, augmentation_cls, computation_device="cpu")
+    input, _ = next(iter(dl))
+    aug_input, _ = next(iter(batch_aug_dl))
+    assert input.size() == aug_input.size()
+    assert input.size() == aug_input.size()
+

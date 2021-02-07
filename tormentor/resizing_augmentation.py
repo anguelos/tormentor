@@ -94,8 +94,8 @@ class PadTo(ResizingAugmentation):
         out_X = []
         out_Y = []
         for n in range(batch_size):
-            left, top, right, bottom = ltrb_padings[n,:].tolist()
-            cur_Y = torch.nn.functional.pad(in_Y[n:n+1,:, :, :], [left, 0, 0, 0], value=-1.1)
+            left, top, right, bottom = ltrb_padings[n, :].tolist()
+            cur_Y = torch.nn.functional.pad(in_Y[n:n+1, :, :, :], [left, 0, 0, 0], value=-1.1)
             cur_Y = torch.nn.functional.pad(cur_Y, [0, right, 0, 0], value=1.1)
             cur_Y = torch.nn.functional.pad(cur_Y, [0, 0, top, bottom], mode='replicate')
             out_Y.append(cur_Y)
@@ -109,7 +109,7 @@ class PadTo(ResizingAugmentation):
         return out_X[:, 0, :, :], out_Y[:,0,:,:]
 
     @classmethod
-    def functional_image(cls, batch: torch.Tensor, ltrb_padings) -> torch.Tensor:
+    def functional_image(cls, batch: torch.Tensor, ltrb_padings:torch.Tensor) -> torch.Tensor:
         res_tensors = []
         lrtb_paddings = ltrb_padings[:, [0, 2, 1, 3]]
         for n in range(batch.size(0)):
@@ -168,9 +168,10 @@ class CropTo(ResizingAugmentation):
         return out_X, out_Y
 
     @classmethod
-    def functional_image(cls, batch: torch.Tensor, ltrb_crops) -> torch.Tensor:
+    def functional_image(cls, batch: torch.Tensor, ltrb_crops: torch.Tensor) -> torch.Tensor:
         res_tensors = []
         batch_size, _, in_height, in_width = batch.size()
+        print("CropTo.functional_image", ltrb_crops)
         for n in range(batch.size(0)):
             left, top, right_crop, bottom_crop = ltrb_crops[n, :].tolist()
             right = in_width - right_crop
@@ -180,21 +181,17 @@ class CropTo(ResizingAugmentation):
         return res
 
 
-class PadCropTo(ResizingAugmentation):
+class PadCropTo(CropTo, PadTo):
     r"""Resizes Image to a specific size.
 
     Will zero-pad or crop as needed to meet the size.
     Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
     """
 
-    center_x = Uniform((0.0, 1.0))
-    center_y = Uniform((0.0, 1.0))
-
     def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
-        center_x = type(self).center_x(batch_tensor.size(0))
-        center_y = type(self).center_y(batch_tensor.size(0))
-        return center_x, center_y
-
+        #center_x = type(self).center_x(batch_tensor.size(0))
+        #center_y = type(self).center_y(batch_tensor.size(0))
+        return CropTo.generate_batch_state(self, batch_tensor) + PadTo.generate_batch_state(self, batch_tensor)
 
     @classmethod
     def functional_image(cls, batch: torch.Tensor, ltrb_crops: torch.Tensor, ltrb_pads: torch.Tensor) -> torch.Tensor:
