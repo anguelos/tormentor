@@ -356,7 +356,6 @@ class DeterministicImageAugmentation(object):
             assert 3 <= args[0].ndim <= 4
             return self.augment_mask(args[0])
         else:
-            print(args)
             raise ValueError
 
     def __repr__(self):
@@ -623,6 +622,30 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
         return self.forward_img(X)
 
 
+class Identity(DeterministicImageAugmentation):
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+        return ()
+
+    def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
+        return coords
+
+    def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
+        return bboxes
+
+    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        return batch_tensor
+
+    def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
+        return batch_tensor
+
+    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
+                           compute_img: bool) -> PointCloudsImages:
+        if compute_img:
+            return pcl, batch_tensor
+        else:
+            return pcl
+
+
 class AugmentationCascade(DeterministicImageAugmentation):
     r"""Select randomly among many augmentations.
 
@@ -737,30 +760,6 @@ class AugmentationCascade(DeterministicImageAugmentation):
             aug_name = f"{contained_augmentation.__qualname__}{n}"
             res.update({f"{aug_name}: {k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
         return res
-
-
-class Identity(DeterministicImageAugmentation):
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
-        return ()
-
-    def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
-        return coords
-
-    def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
-        return bboxes
-
-    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        return batch_tensor
-
-    def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
-        return batch_tensor
-
-    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
-                           compute_img: bool) -> PointCloudsImages:
-        if compute_img:
-            return pcl, batch_tensor
-        else:
-            return pcl
 
 
 class AugmentationChoice(DeterministicImageAugmentation):

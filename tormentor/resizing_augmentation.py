@@ -20,14 +20,10 @@ class ResizingAugmentation(SpatialImageAugmentation):
 
     @staticmethod
     def resample(old_coords: SamplingField, new_coords: SamplingField):
-        print("new_coords:",    new_coords[0].size())
-        print("old_coords:", old_coords[0].size())
         new_coords_grid = torch.cat((new_coords[0].unsqueeze(dim=-1), new_coords[1].unsqueeze(dim=-1)), dim=3)
         collated_old_coords = torch.cat((old_coords[0].unsqueeze(dim=1), old_coords[1].unsqueeze(dim=1)), dim=1)
         collated_new_coords = torch.nn.functional.grid_sample(collated_old_coords, new_coords_grid, align_corners=True)
-        print("collated_new_coords:", collated_new_coords.size())
         res = collated_new_coords[:, 0, :, :], collated_new_coords[:, 1, :, :]
-        print("res:", res[0].size())
         return res
 
     def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
@@ -171,7 +167,6 @@ class CropTo(ResizingAugmentation):
     def functional_image(cls, batch: torch.Tensor, ltrb_crops: torch.Tensor) -> torch.Tensor:
         res_tensors = []
         batch_size, _, in_height, in_width = batch.size()
-        print("CropTo.functional_image", ltrb_crops)
         for n in range(batch.size(0)):
             left, top, right_crop, bottom_crop = ltrb_crops[n, :].tolist()
             right = in_width - right_crop
@@ -189,8 +184,6 @@ class PadCropTo(CropTo, PadTo):
     """
 
     def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
-        #center_x = type(self).center_x(batch_tensor.size(0))
-        #center_y = type(self).center_y(batch_tensor.size(0))
         return CropTo.generate_batch_state(self, batch_tensor) + PadTo.generate_batch_state(self, batch_tensor)
 
     @classmethod

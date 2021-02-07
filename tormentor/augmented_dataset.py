@@ -131,8 +131,8 @@ class AugmentedCocoDs(AugmentedDs):
                     end_pos = n
                     object_surfaces.append((start_pos, end_pos))
                 object_start_end_pos.append(object_surfaces)
-        pc = (torch.tensor(point_cloud_x, device=process_device), torch.tensor(point_cloud_y, device=process_device))
-        input = input.to(process_device)  # making a batch from an image
+        pc = (torch.tensor(point_cloud_x, device=device), torch.tensor(point_cloud_y, device=device))
+        input = input.to(device)  # making a batch from an image
         aug_pc, aug_img = augmentation(pc, input)
         if len(obj_mask_images):
             obj_mask_images = torch.cat(obj_mask_images, dim=1).float()

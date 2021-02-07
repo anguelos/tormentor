@@ -48,7 +48,7 @@ class AugmentationFactory(object):
             A new factory containing a augmentation class that will be resizing to a specific size
 
         """
-        if isinstance(self.augmentation_cls, ResizingAugmentation):
+        if issubclass(self.augmentation_cls, ResizingAugmentation):
             new_augmentation_cls = self.augmentation_cls.new_size(width=width, height=height,
                                                                    requires_grad=requires_grad)
             return AugmentationFactory(new_augmentation_cls)
