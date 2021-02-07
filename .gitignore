@@ -6,4 +6,8 @@ docs/build/**
 .coverage
 .eggs/**
 .ipynb_checkpoints/**
+build/**
+data/**
+dist/**
+*.egg-info/**
 
