@@ -1,7 +1,6 @@
 import math
 import torch
 
-
 # For avoiding division by zero
 _epsilon = .00000001
 
@@ -90,7 +89,6 @@ def diamond_square(width_height=None, replicates=1, output_range=None, recursion
             # setting mean and deviation
             img = img * (output_deviation_mean[0]) + output_deviation_mean[1]
 
-
         if width_height is not None:
             # TODO(anguelos) make sure there is no bias by cropping on the to left bias
             img = img[:, :, :width_height[0], :width_height[1]]
@@ -101,7 +99,7 @@ def diamond_square(width_height=None, replicates=1, output_range=None, recursion
             return img
 
 
-def _diamond_square_seed(replicates, width, height, random, device=None):
+def _diamond_square_seed(replicates, width, height, random, device):
     assert width == 3 or height == 3
     if height == 3:
         transpose = True
@@ -132,7 +130,7 @@ def _diamond_square_seed(replicates, width, height, random, device=None):
 
 # noinspection PyPackageRequirements
 def functional_diamond_square(output_size, roughness=.5, rnd_scale=1.0, device=None,
-                              seed_img=None, random=torch.rand) -> torch.Tensor:
+                              seed_img=None, random=torch.rand, normalize_range=(0., 1.)) -> torch.Tensor:
     """Generates Plasma Fractal Images
 
     Args:
@@ -189,6 +187,11 @@ def functional_diamond_square(output_size, roughness=.5, rnd_scale=1.0, device=N
 
     img = img[:, :, :width, :height]
     img = img.view(output_size)
+    if normalize_range is not None:
+        sample_min = img.min(dim=1)[0].min(dim=1)[0].min(dim=1)[0].view([-1, 1, 1, 1])
+        sample_max = img.max(dim=1)[0].max(dim=1)[0].max(dim=1)[0].view([-1, 1, 1, 1])
+        sample_range = sample_max - sample_min
+        img = (img - sample_min) / sample_range
     return img
 
 
@@ -242,6 +245,9 @@ def one_diamond_one_square(img, rnd_scale, random=torch.rand, diamond_kernel=def
 
 
 class DiamondSquare(torch.nn.Module):
+    def get_current_device(self):
+        return self.initial_rnd_scale.data.device
+
     def __init__(self, recursion_steps=1, rnd_scale=1.0, rand=torch.rand):
         self.recursion_steps = recursion_steps
         self.rand = rand
@@ -254,12 +260,13 @@ class DiamondSquare(torch.nn.Module):
             self.square_kernel, requires_grad=True).unsqueeze(dim=0).unsqueeze(dim=0))
         self.initial_rnd_scale=torch.nn.Parameter(torch.tensor(rnd_scale,requires_grad=False))
 
-    def forward(self,input=None, seed_size=None):
+    def forward(self, input_img=None, seed_size=None):
         if input is None:
-            img = _diamond_square_seed(size)
+            img = _diamond_square_seed(seed_size, device=self.get_current_device())
         else:
-            img = input
+            img = input_img
         rnd_scale = self.initial_rnd_range.clone()
         for _ in range(self.recursion_steps):
             img = one_diamond_one_square(img, random=self.rand, diamond_kernel=self.diamond_kernel, square_kernel=self.square_kernel, rnd_scale=rnd_scale)
         return img
+
