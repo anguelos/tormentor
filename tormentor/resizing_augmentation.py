@@ -1,7 +1,7 @@
 import kornia as K
 import torch
 
-from .base_augmentation import SamplingField, SpatialAugmentationState, DeterministicImageAugmentation, AugmentationCascade, SpatialImageAugmentation
+from .base_augmentation import SamplingField, AugmentationState, DeterministicImageAugmentation, AugmentationCascade, SpatialImageAugmentation
 from .random import Constant, Uniform, Categorical
 
 
@@ -26,7 +26,7 @@ class ResizingAugmentation(SpatialImageAugmentation):
         res = collated_new_coords[:, 0, :, :], collated_new_coords[:, 1, :, :]
         return res
 
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
         raise NotImplementedError()
 
     @classmethod
@@ -58,7 +58,7 @@ class PadTo(ResizingAugmentation):
     center_x = Uniform((0.0, 1.0))
     center_y = Uniform((0.0, 1.0))
 
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
         batch_size, _, img_height, img_width = batch_tensor.size()
         out_width = type(self).out_width(1)
         out_height = type(self).out_height(1)
@@ -124,7 +124,7 @@ class CropTo(ResizingAugmentation):
     center_x = Uniform((0.0, 1.0))
     center_y = Uniform((0.0, 1.0))
 
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
         batch_size, _, img_height, img_width = batch_tensor.size()
         out_width = type(self).out_width(1)
         out_height = type(self).out_height(1)
@@ -183,7 +183,7 @@ class PadCropTo(CropTo, PadTo):
     Cropping and Padding os centered according ``outwidth`` and ``outheight``, 0.5 meaning perfectly centered.
     """
 
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
         return CropTo.generate_batch_state(self, batch_tensor) + PadTo.generate_batch_state(self, batch_tensor)
 
     @classmethod

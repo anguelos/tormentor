@@ -10,7 +10,7 @@ PointCloud = Tuple[torch.FloatTensor, torch.FloatTensor]
 PointCloudList = List[PointCloud]
 PointCloudsImages = Tuple[PointCloudList, torch.FloatTensor]
 PointCloudOneOrMore = Union[PointCloudList, PointCloud]
-SpatialAugmentationState = Tuple[torch.Tensor, ...]
+AugmentationState = Tuple[torch.Tensor, ...]
 
 # This is a work around probably wrong behavior of pytorch
 # A bug report has been submitted to pytorch
@@ -242,13 +242,19 @@ class DeterministicImageAugmentation(object):
             n_dims = len(mask_tensor.size())
             # TODO(anguelos) allow for class index long tensors
             # TODO(anguelos) allow to enforce probabilistic interpretation of channels
+            if mask_tensor.dtype == torch.bool:
+                float_mask_tensor = mask_tensor.float()
+            else:
+                float_mask_tensor = mask_tensor
             if n_dims == 3:
-                res = self.forward_mask(mask_tensor.unsqueeze(dim=0))[0, :, :]
-                return res
+                res = self.forward_mask(float_mask_tensor.unsqueeze(dim=0))[0, :, :]
             elif n_dims == 4:
-                return self.forward_mask(mask_tensor)
+                res = self.forward_mask(float_mask_tensor)
             else:
                 raise ValueError("mask_tensor must represent a sample [CxHxW] or a batch [BxCxHxW]")
+            if mask_tensor.dtype == torch.bool:
+                res = res > .5
+            return res
 
     def augment_sampling_field(self, sf: SamplingField):
         r"""Augments a sampling field for an image or samplingfileds for batches.
@@ -375,7 +381,7 @@ class DeterministicImageAugmentation(object):
                 attribute_strings.append(f"{name}:{repr(attribute)}")
         return self.__class__.__qualname__ + ":\n\t" + "\n\t".join(attribute_strings)
 
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
         """Generates deterministic state for each augmentation.
 
         Returns: a tuple of tensors representing the complete state of the augmentaion so that a
@@ -596,6 +602,14 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         return type(self).functional_image(*((batch_tensor,) + state))
 
 
+class Identity(StaticImageAugmentation):
+    def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
+        return ()
+
+    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        return batch_tensor
+
+
 class SpatialImageAugmentation(DeterministicImageAugmentation):
     r"""Parent class for augmentations that move things around.
 
@@ -620,30 +634,6 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
 
     def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
         return self.forward_img(X)
-
-
-class Identity(DeterministicImageAugmentation):
-    def generate_batch_state(self, batch_tensor: torch.Tensor) -> SpatialAugmentationState:
-        return ()
-
-    def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
-        return coords
-
-    def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
-        return bboxes
-
-    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        return batch_tensor
-
-    def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
-        return batch_tensor
-
-    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
-                           compute_img: bool) -> PointCloudsImages:
-        if compute_img:
-            return pcl, batch_tensor
-        else:
-            return pcl
 
 
 class AugmentationCascade(DeterministicImageAugmentation):
@@ -822,3 +812,34 @@ class AugmentationChoice(DeterministicImageAugmentation):
             augmented_batch.append(augmented_sample)
         augmented_batch = torch.cat(augmented_batch, dim=0)
         return augmented_batch
+
+    def forward_mask(self, batch_tensor):
+        batch_sz = batch_tensor.size(0)
+        augmentation_ids = type(self).choice(batch_sz)
+        augmented_batch = []
+        for sample_n in range(batch_sz):
+            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
+            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
+            augmented_sample = augmentation.forward_mask(sample_tensor)
+            augmented_batch.append(augmented_sample)
+        augmented_batch = torch.cat(augmented_batch, dim=0)
+        return augmented_batch
+
+    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
+                           compute_img: bool) -> PointCloudsImages:
+        batch_sz = batch_tensor.size(0)
+        augmentation_ids = type(self).choice(batch_sz)
+        augmented_batch = []
+        augmented_pcl = []
+        for sample_n in range(batch_sz):
+            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
+            pc_onelist = pcl[sample_n: sample_n + 1]
+            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
+            aug_pc_onelist, augmented_sample = augmentation.forward_pointcloud(pc_onelist, sample_tensor, compute_img)
+            augmented_batch.append(augmented_sample)
+            augmented_pcl = augmented_pcl + aug_pc_onelist
+        if compute_img:
+            augmented_batch = torch.cat(augmented_batch, dim=0)
+            return augmented_pcl, augmented_batch
+        else:
+            return augmented_pcl, batch_tensor

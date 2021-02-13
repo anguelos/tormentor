@@ -1,7 +1,7 @@
 import kornia as K
 import torch
 
-from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState
+from .base_augmentation import SpatialImageAugmentation, SamplingField, AugmentationState
 from .random import Uniform, Bernoulli
 
 
@@ -17,7 +17,7 @@ class Perspective(SpatialImageAugmentation):
     x_offset = Uniform((.75, 1.5))
     y_offset = Uniform((.75, 1.5))
 
-    def generate_batch_state(self, sampling_tensors: SamplingField) -> SpatialAugmentationState:
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> AugmentationState:
         batch_sz = sampling_tensors[0].size(0)
         top_left_x = -1 * type(self).x_offset(batch_sz, device=sampling_tensors[0].device).view(-1, 1, 1)
         top_right_x = 1 * type(self).x_offset(batch_sz, device=sampling_tensors[0].device).view(-1, 1, 1)
@@ -55,7 +55,7 @@ class Rotate(SpatialImageAugmentation):
    """
     radians = Uniform((-3.1415, 3.1415))
 
-    def generate_batch_state(self, sampling_tensors: SamplingField) -> SpatialAugmentationState:
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> AugmentationState:
         batch_sz = sampling_tensors[0].size(0)
         radians = type(self).radians(batch_sz, device=sampling_tensors[0].device).view(-1)
         return radians,
@@ -89,7 +89,7 @@ class Zoom(SpatialImageAugmentation):
    """
     scales = Uniform(value_range=(.5, 1.5))
 
-    def generate_batch_state(self, sampling_field: SamplingField) -> SpatialAugmentationState:
+    def generate_batch_state(self, sampling_field: SamplingField) -> AugmentationState:
         scales = type(self).scales(sampling_field[0].size(0), device=sampling_field[0].device)
         return scales,
 

@@ -1,7 +1,7 @@
 import kornia as K
 
 from diamond_square import functional_diamond_square
-from .base_augmentation import StaticImageAugmentation, SpatialAugmentationState
+from .base_augmentation import StaticImageAugmentation, AugmentationState
 from .random import *
 
 
@@ -16,13 +16,15 @@ class ColorAugmentation(StaticImageAugmentation):
     def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
         state = self.generate_batch_state(batch_tensor)
         if batch_tensor.size(1) == 3:  # Color operations require
-            return type(self).functional_image(*((batch_tensor,) + state))
+            result = type(self).functional_image(*((batch_tensor,) + state))
+            return result
         if batch_tensor.size(1) == 1:  # Color operations require
             batch_tensor = batch_tensor.repeat([1, 3, 1, 1])
             batch_tensor = type(self).functional_image(*((batch_tensor,) + state))
             return K.color.rgb_to_grayscale(batch_tensor)
         else:  # No colors were in the image, it will be ignored
             return batch_tensor
+
 
 
 class Invert(ColorAugmentation):
@@ -32,7 +34,7 @@ class Invert(ColorAugmentation):
    """
     do_inversion = Bernoulli(.2)
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         do_inversion = type(self).do_inversion(batch.size(0), device=batch.device).view(-1).float()
         return do_inversion,
 
@@ -43,7 +45,6 @@ class Invert(ColorAugmentation):
         hsv_batch = K.color.rgb_to_hsv(batch)
         hsv_batch[:, 2:, :, :] = (1 - hsv_batch[:, 2:, :, :]) * do_inversion + hsv_batch[:, 2:, :, :] * (1 - do_inversion)
         out_batch = K.color.hsv_to_rgb(hsv_batch)
-        print((batch==out_batch).sum())
         return out_batch
 
 
@@ -54,7 +55,7 @@ class Brightness(ColorAugmentation):
    """
     brightness = Uniform((-1.0, 1.0))
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         brightness = type(self).brightness(batch.size(0), device=batch.device).view(-1)
         return brightness,
 
@@ -70,7 +71,7 @@ class Saturation(ColorAugmentation):
    """
     saturation = Uniform((0.0, 2.0))
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         saturation = type(self).saturation(batch.size(0), device=batch.device).view(-1)
         return saturation,
 
@@ -86,7 +87,7 @@ class Contrast(ColorAugmentation):
    """
     contrast = Uniform((0.0, 1.0))
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
         return contrast,
 
@@ -103,7 +104,7 @@ class Hue(ColorAugmentation):
    """
     hue = Uniform((-.5, .5))
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         hue = type(self).hue(batch.size(0), device=batch.device).view(-1)
         return hue,
 
@@ -123,7 +124,7 @@ class ColorJitter(ColorAugmentation):
     saturation = Uniform((0.0, 2.0))
     brightness = Uniform((-1.0, 1.0))
 
-    def generate_batch_state(self, batch: torch.FloatTensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         hue = type(self).contrast(batch.size(0), device=batch.device).view(-1)
         contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
         saturation = type(self).saturation(batch.size(0), device=batch.device).view(-1)
@@ -158,7 +159,6 @@ class PlasmaBrightness(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness_map: torch.FloatTensor) -> torch.FloatTensor:
-        # brightness = brightness.view(-1, 1, 1, 1)
         return torch.clamp(batch + brightness_map, 0, 1)
 
 

@@ -1,7 +1,7 @@
 import torch
 
 from diamond_square import functional_diamond_square
-from .base_augmentation import SpatialImageAugmentation, SamplingField, SpatialAugmentationState, StaticImageAugmentation
+from .base_augmentation import SpatialImageAugmentation, SamplingField, AugmentationState, StaticImageAugmentation
 from .random import Uniform, Bernoulli
 
 
@@ -19,7 +19,7 @@ class Wrap(SpatialImageAugmentation):
     roughness = Uniform(value_range=(.1, .7))
     intensity = Uniform(value_range=(.0, 1.))
 
-    def generate_batch_state(self, sampling_tensors: SamplingField) -> SpatialAugmentationState:
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> AugmentationState:
         batch_sz, height, width = sampling_tensors[0].size()
         roughness = type(self).roughness(batch_sz, device=sampling_tensors[0].device)
         intensity = type(self).intensity(batch_sz, device=sampling_tensors[0].device)
@@ -61,7 +61,7 @@ class Shred(StaticImageAugmentation):
     inside = Bernoulli(prob=.5)
     erase_percentile = Uniform(value_range=(.0, .5))
 
-    def generate_batch_state(self, image_batch: torch.Tensor) -> SpatialAugmentationState:
+    def generate_batch_state(self, image_batch: torch.Tensor) -> AugmentationState:
         batch_sz, _, width, height = image_batch.size()
         roughness = type(self).roughness(batch_sz, device=image_batch.device)
         plasma_sz = (batch_sz, 1, width, height)
