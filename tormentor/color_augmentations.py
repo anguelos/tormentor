@@ -32,7 +32,7 @@ class Invert(ColorAugmentation):
 
     .. image:: _static/example_images/Invert.png
    """
-    do_inversion = Bernoulli(.2)
+    do_inversion = Bernoulli(.5)
 
     def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         do_inversion = type(self).do_inversion(batch.size(0), device=batch.device).view(-1).float()
