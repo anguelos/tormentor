@@ -329,7 +329,11 @@ class DeterministicImageAugmentation(object):
 
         In essence __call__ implements method overloading for different kinds of data and simply routes to the
         apropriate method. If it is preffered to state the routing explicitly, the "self.augment_..." methods should be
-        used. Pointclouds as sampling_fields
+        used. Pointclouds as sampling_fields.
+
+        In what concersn mask augmentations:
+        When masks are augmented either as label tensors or onehots, class zero is chosen as a tiebreaker. augmented
+        onehots are softly rounded by beeing scaled and then having a softmax aplied along the channel dimension.
 
         Args:
             *args: can be one of the following
@@ -338,18 +342,49 @@ class DeterministicImageAugmentation(object):
 
                 [SamplingFiled]: calls ``self.augment_sampling_field``
 
-                [torch.Tensor]: calls ``self.augment_sampling_image`` or calls ``self.augment_mask``
+                [torch.Tensor]: calls ``self.augment_sampling_image`` or calls ``self.augment_mask`` if the tensor has
+                    a discrete dtype it is intepreted to be [batch x height x width] or [height x width] converted to a
+                    onehot encoding as the channel and augmented as a mask, this includes dtype troch.bool.
 
             compute_img: if True, the image_data contextualising the pointcloud will also be augmented and they will
                 share the sampling field computation they both use.
-            is_mask: if True, the image tensor is considered a mask.
+            is_mask: if True, the image tensor is considered a mask. If args[0] is a discrete Tensor, this flag is
+                ignored and ``self.augment_mask`` is called.
 
         Returns:
             data equivalent what was passed in args"""
         # practiaclly method overloading
         # if I could only test objects for Typing Generics
         assert len(args) == 1 or len(args) == 2
-        if len(args) == 2:  # pointcloud and image tensor
+        if len(args) == 1  and isinstance(args[0], torch.Tensor) and args[0].dtype in (torch.int64, torch.int32, torch.int16, torch.int8, torch.uint8, torch.bool):
+            assert 2 <= args[0].ndim <= 3 # labels are to be expanded as the channel dimesion
+            n_channels, height, width = args[0].max() + 1, args[0].size(-2), args[0].size(-1)
+            if args[0].ndim == 2:
+                batch_sz = 1
+                input_batch = args[0].unsqueeze(dim=0)
+            else:
+                batch_sz = args[0].size(0)
+                input_batch = args[0]
+            batch_onehots = torch.empty([batch_sz, n_channels, height, width], dtype=torch.float,
+                                                device=input_batch.device)
+            augmented_onehot_mask = torch.empty([batch_sz, n_channels, height, width], dtype=torch.float, device=input_batch.device)
+            for channel in range(n_channels):  # todo(anguelos) implement a better onehot
+                batch_onehots[:, channel, :, :] = (input_batch[:, :, :] == channel).float()
+                binary_slice = (input_batch[:, :, :] == channel).unsqueeze(dim=1).float()
+                augmented_onehot_mask[:, channel: channel + 1, :, :] = self.augment_mask(binary_slice)
+            #augmented_onehot_mask = self.augment_mask(batch_onehots)
+
+            epsilon = torch.zeros([1, n_channels, 1, 1], device=augmented_onehot_mask.device)
+            epsilon[0, 0, 0, 0] = .00000000001 # lets favor the zero class if a pixels label is ambiguous.
+            # todo(anguelos) should we allow the enduser control on the tie-breaker class?
+
+            batch_labels = torch.argmax(augmented_onehot_mask + epsilon, dim=1)
+            batch_labels = batch_labels.to(args[0].dtype)
+            if args[0].ndim == 2:
+                return batch_labels[0, :, :]
+            else:
+                return batch_labels
+        elif len(args) == 2:  # pointcloud and image tensor
             pointcloud, image_tensor = args
             return self.augment_pointcloud(pointcloud, image_tensor, compute_img)
         elif isinstance(args[0], tuple):  # sampling field
@@ -360,7 +395,19 @@ class DeterministicImageAugmentation(object):
             return self.augment_image(args[0])
         elif isinstance(args[0], torch.Tensor) and is_mask:
             assert 3 <= args[0].ndim <= 4
-            return self.augment_mask(args[0])
+            resulting_mask = self.augment_mask(args[0])
+            if resulting_mask.size(-3) > 1: # making sure the mask preserves a onehot-like probabillity
+                if resulting_mask.ndim == 4:
+                    epsilon = torch.zeros([1, resulting_mask.size(1), 1, 1], device=resulting_mask.device)
+                    epsilon[0, 0, 0, 0] = .01  # lets favor the zero class if a pixels label is ambiguous.
+                    # todo(anguelos) should we allow the enduser control on the tie-breaker class?
+                    resulting_mask = torch.softmax((resulting_mask + epsilon) * 1000, dim=1)
+                else:
+                    epsilon = torch.zeros([resulting_mask.size(0), 1, 1], device=resulting_mask.device)
+                    epsilon[0, 0, 0] = .01  # lets favor the zero class if a pixels label is ambiguous.
+                    # todo(anguelos) should we allow the enduser control on the tie-breaker class?
+                    resulting_mask = torch.softmax((resulting_mask + epsilon) * 1000, dim=0)
+            return resulting_mask
         else:
             raise ValueError
 
