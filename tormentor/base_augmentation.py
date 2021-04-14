@@ -26,6 +26,7 @@ else:
 def _use_sampling_field(sf: SamplingField):
     return None
 
+
 def is_sampling_field(var):
     r"""Returns True is var is a SamplingField.
 
@@ -55,8 +56,10 @@ def is_typing(var, type_definition):
     Returns:
 
     """
+
     def _f(parameter: type_definition) -> int:
         return parameter
+
     try:
         _f(var)
         return True
@@ -356,8 +359,10 @@ class DeterministicImageAugmentation(object):
         # practiaclly method overloading
         # if I could only test objects for Typing Generics
         assert len(args) == 1 or len(args) == 2
-        if len(args) == 1  and isinstance(args[0], torch.Tensor) and args[0].dtype in (torch.int64, torch.int32, torch.int16, torch.int8, torch.uint8, torch.bool):
-            assert 2 <= args[0].ndim <= 3 # labels are to be expanded as the channel dimesion
+        if len(args) == 1 and isinstance(args[0], torch.Tensor) and args[0].dtype in [torch.int64, torch.int32,
+                                                                                      torch.int16, torch.int8,
+                                                                                      torch.uint8, torch.bool]:
+            assert 2 <= args[0].ndim <= 3  # labels are to be expanded as the channel dimesion
             n_channels, height, width = args[0].max() + 1, args[0].size(-2), args[0].size(-1)
             if args[0].ndim == 2:
                 batch_sz = 1
@@ -366,16 +371,13 @@ class DeterministicImageAugmentation(object):
                 batch_sz = args[0].size(0)
                 input_batch = args[0]
             batch_onehots = torch.empty([batch_sz, n_channels, height, width], dtype=torch.float,
-                                                device=input_batch.device)
-            augmented_onehot_mask = torch.empty([batch_sz, n_channels, height, width], dtype=torch.float, device=input_batch.device)
+                                        device=input_batch.device)
             for channel in range(n_channels):  # todo(anguelos) implement a better onehot
                 batch_onehots[:, channel, :, :] = (input_batch[:, :, :] == channel).float()
-                binary_slice = (input_batch[:, :, :] == channel).unsqueeze(dim=1).float()
-                augmented_onehot_mask[:, channel: channel + 1, :, :] = self.augment_mask(binary_slice)
-            #augmented_onehot_mask = self.augment_mask(batch_onehots)
+            augmented_onehot_mask = self.augment_mask(batch_onehots)
 
             epsilon = torch.zeros([1, n_channels, 1, 1], device=augmented_onehot_mask.device)
-            epsilon[0, 0, 0, 0] = .00000000001 # lets favor the zero class if a pixels label is ambiguous.
+            epsilon[0, 0, 0, 0] = .00000000001  # lets favor the zero class if a pixels label is ambiguous.
             # todo(anguelos) should we allow the enduser control on the tie-breaker class?
 
             batch_labels = torch.argmax(augmented_onehot_mask + epsilon, dim=1)
@@ -396,7 +398,7 @@ class DeterministicImageAugmentation(object):
         elif isinstance(args[0], torch.Tensor) and is_mask:
             assert 3 <= args[0].ndim <= 4
             resulting_mask = self.augment_mask(args[0])
-            if resulting_mask.size(-3) > 1: # making sure the mask preserves a onehot-like probabillity
+            if resulting_mask.size(-3) > 1:  # making sure the mask preserves a onehot-like probabillity
                 if resulting_mask.ndim == 4:
                     epsilon = torch.zeros([1, resulting_mask.size(1), 1, 1], device=resulting_mask.device)
                     epsilon[0, 0, 0, 0] = .01  # lets favor the zero class if a pixels label is ambiguous.
