@@ -1,7 +1,6 @@
-import kornia as K
 import torch
 
-from .base_augmentation import SamplingField, AugmentationState, DeterministicImageAugmentation, AugmentationCascade, SpatialImageAugmentation
+from .base_augmentation import SamplingField, AugmentationState, DeterministicImageAugmentation, SpatialImageAugmentation
 from .random import Constant, Uniform, Categorical
 
 

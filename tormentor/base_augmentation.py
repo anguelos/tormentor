@@ -224,6 +224,7 @@ class DeterministicImageAugmentation(object):
             else:
                 raise ValueError("image_tensor must represent a sample or a batch")
 
+
     def augment_mask(self, mask_tensor: torch.Tensor):
         r"""Augments an mask or a batch of masks.
 
@@ -438,22 +439,6 @@ class DeterministicImageAugmentation(object):
         """
         raise NotImplementedError()
 
-    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        """Distorts a batch of one or more images.
-
-        :param batch_tensor: Images are 4D tensors of [batch_size, #channels, height, width] size.
-        :return: A create_persistent 4D tensor [batch_size, #channels, height, width] with the create_persistent image.
-        """
-        raise NotImplementedError()
-
-    def forward_mask(self, batch_tensor: torch.Tensor) -> torch.LongTensor:
-        """Distorts a a batch of one or more masks.
-
-        :param batch_tensor: Images are 4D tensors of [batch_size, #channels, height, width] size.
-        :return: A create_persistent 4D tensor [batch_size, #channels, height, width] with the create_persistent image.
-        """
-        raise NotImplementedError()
-
     @classmethod
     def get_distributions(cls, copy=True):
         res = {}
@@ -492,6 +477,22 @@ class DeterministicImageAugmentation(object):
         new_cls = type(new_cls_name, (cls,), cls_members)
         return new_cls
 
+    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        """Distorts a batch of one or more images.
+
+        :param batch_tensor: Images are 4D tensors of [batch_size, #channels, height, width] size.
+        :return: A create_persistent 4D tensor [batch_size, #channels, height, width] with the create_persistent image.
+        """
+        raise NotImplementedError()
+
+    def forward_mask(self, batch_tensor: torch.Tensor) -> torch.LongTensor:
+        """Distorts a a batch of one or more masks.
+
+        :param batch_tensor: Images are 4D tensors of [batch_size, #channels, height, width] size.
+        :return: A create_persistent 4D tensor [batch_size, #channels, height, width] with the create_persistent image.
+        """
+        raise NotImplementedError()
+
     def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
         """Applies a transformation on Image coordinate defined bounding boxes.
 
@@ -502,28 +503,10 @@ class DeterministicImageAugmentation(object):
             image_tensor (torch.FloatTensor): A valid batch image tensor [S x C x H x C] or sample image tensor
                 [C x H x W]. In both cases it only used to normalise bbox coordinates and can be omitted if width_height
                 is specified.
-            width_height (int, int ): Values used to normalise bbox coordinates to [-1,1] and back, should be ommited if
+            width_height (int, int ): Values used to normalise bbox coordinates to [-1,1] and back, should be omitted if
                 image tensor is passed
 
         Returns: a tensor with the bounding boxes of the transformed bounding box.
-
-
-        """
-        """Applies a transformation on Image coordinate defined bounding boxes.
-
-        Bounding Boxes are encoded as [Left, Top, Right, Bottom]
-
-        Args:
-            bboxes (torch.FloatTensor) : A tensor with bboxes for a sample [N x 4] or a batch [S x N x 4]
-            image_tensor (torch.FloatTensor): A valid batch image tensor [S x C x W x H] or sample image tensor
-                [C x H x W]. In both cases it only used to normalise bbox coordinates and can be omitted if width_height
-                is specified.
-            width_height (int, int ): Values used to normalise bbox coordinates to [-1,1] and back, should be ommited if
-                image tensor is passed
-
-        Returns: a tensor with the bounding boxes of the transformed bounding box.
-
-
         """
         if len(bboxes.size()) == 2:
             bboxes = bboxes.unsqueeze(dim=0)
@@ -551,6 +534,7 @@ class DeterministicImageAugmentation(object):
         bottom = ((pointcloud[1].max(dim=1) + 1) * .5 * height).view(-[1, 1])
         result_bboxes = torch.concat([left, top, right, bottom], dim=1)
         return result_bboxes
+
 
     def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
                            compute_img: bool) -> PointCloudsImages:
@@ -618,6 +602,22 @@ class DeterministicImageAugmentation(object):
         raise NotImplementedError()
 
 
+    def forward_img_counterfactuals(self, batch_tensor: torch.FloatTensor, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        raise NotImplementedError()
+
+    def forward_mask_counterfactuals(self, batch_tensor: torch.FloatTensor, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        raise NotImplementedError()
+
+    def forward_bbox_counterfactuals(self, batch_tensor: torch.FloatTensor, image_tensor=None, width_height=None, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        raise NotImplementedError()
+
+    def forward_pointcloud_counterfactuals(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
+                           compute_img: bool) -> Tuple[PointCloudsImages, torch.FloatTensor]:
+        raise NotImplementedError()
+
+    def forward_sampling_field_counterfactuals(self, coords: SamplingField, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[SamplingField, torch.FloatTensor]:
+        raise NotImplementedError()
+
 class StaticImageAugmentation(DeterministicImageAugmentation):
     r"""Parent class for augmentations that don't move things around.
 
@@ -650,6 +650,32 @@ class StaticImageAugmentation(DeterministicImageAugmentation):
         state = self.generate_batch_state(batch_tensor)
         return type(self).functional_image(*((batch_tensor,) + state))
 
+    def forward_img_counterfactuals(self, batch_tensor: torch.FloatTensor, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        if nb_samples == -1 or nb_samples >= probs.size(0):
+            return self.forward_img(batch_tensor), probs
+        else:
+            idx = torch.argsort(probs * torch.rand(probs.size(0)))[-nb_samples:]
+            return self.forward_img(batch_tensor[idx, :, :, :]), probs[idx]
+
+    def forward_mask_counterfactuals(self, batch_tensor: torch.FloatTensor, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        if nb_samples == -1 or nb_samples >= probs.size(0):
+            return self.forward_mask(batch_tensor), probs
+        else:
+            idx = torch.argsort(probs * torch.rand(probs.size(0)))[-nb_samples:]
+            return self.forward_mask(batch_tensor[idx, :, :, :]), probs[idx]
+
+    def forward_bbox_counterfactuals(self, batch_tensor: torch.FloatTensor, image_tensor=None, width_height=None, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        if nb_samples == -1 or nb_samples >= probs.size(0):
+            return self.forward_bbox(batch_tensor, image_tensor, width_height), probs
+        else:
+            raise NotImplemented  #  bboxes across multiple images might be multiplexed
+
+    def forward_pointcloud_counterfactuals(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
+                           compute_img: bool) -> Tuple[PointCloudsImages, torch.FloatTensor]:
+        raise NotImplementedError()
+
+    def forward_sampling_field_counterfactuals(self, coords: SamplingField, probs=torch.FloatTensor, nb_samples:int=-1) -> Tuple[SamplingField, torch.FloatTensor]:
+        raise NotImplementedError()
 
 class Identity(StaticImageAugmentation):
     def generate_batch_state(self, batch_tensor: torch.Tensor) -> AugmentationState:
@@ -684,211 +710,3 @@ class SpatialImageAugmentation(DeterministicImageAugmentation):
     def forward_mask(self, X: torch.Tensor) -> torch.Tensor:
         return self.forward_img(X)
 
-
-class AugmentationCascade(DeterministicImageAugmentation):
-    r"""Select randomly among many augmentations.
-
-    .. figure :: _static/example_images/AugmentationCascade.png
-
-        Cascade of perspective augmentation followed by plasma-brightness
-
-        .. code-block :: python
-
-            augmentation_factory = tormentor.RandomPerspective | tormentor.RandomPlasmaBrightness
-
-    A more complete usage of AugmentationCascade and AugmentationChoice can be seen in the following listing
-    which produces the following computation graph. In the graph AugmentationCascade can be though of as all arrows
-    that don't leave an AugmentationChoice
-
-    .. code-block :: python
-
-        from tormentor import RandomColorJitter, RandomFlip, RandomWrap, \
-            RandomPlasmaBrightness, RandomPerspective, \
-            RandomGaussianAdditiveNoise, RandomRotate
-
-        linear_aug = (RandomFlip ^ RandomPerspective ^ RandomRotate)  | RandomColorJitter
-        nonlinear_aug = RandomWrap | RandomPlasmaBrightness
-        final_augmentation = (linear_aug ^ nonlinear_aug) | RandomGaussianAdditiveNoise
-
-        epochs, batch_size, n_points, width, height = 10, 5, 20, 320, 240
-
-        for _ in range(epochs):
-            image_batch = torch.rand(batch_size, 3, height, width)
-            segmentation_batch = torch.rand(batch_size, 1, height, width).round()
-            augmentation = final_augmentation()
-            augmented_images = augmentation(image_batch)
-            augmented_gt = augmentation(segmentation_batch)
-            # Train and do other things
-
-    .. image:: _static/img/routing.svg
-
-
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.augmentations = [aug_cls() for aug_cls in type(self).augmentation_list]
-
-    def __call__(self, *args, **kwargs):
-        current_args = args
-        for augmentation in self.augmentations:
-            current_args = augmentation(*current_args, **kwargs)
-            if not isinstance(current_args, tuple):
-                current_args = (current_args,)
-        if isinstance(current_args, tuple) and len(current_args) == 1:
-            return current_args[0]
-        else:
-            return current_args
-
-    def augment_sampling_field(self, sf: SamplingField) -> SamplingField:
-        device = sf[0].device
-        with random_fork(devices=(device,)):
-            for augmentation in self.augmentations:
-                torch.manual_seed(augmentation.seed)
-                sf = augmentation.forward_sampling_field(sf)
-        return sf
-
-    def augment_image(self, image_tensor: torch.Tensor) -> torch.Tensor:
-        device = image_tensor.device
-        with random_fork(devices=(device,)):
-            for augmentation in self.augmentations:
-                torch.manual_seed(augmentation.seed)
-                image_tensor = augmentation.forward_img(image_tensor)
-        return image_tensor
-
-    def augment_mask(self, image_tensor: torch.Tensor) -> torch.Tensor:
-        device = image_tensor.device
-        with random_fork(devices=(device,)):
-            for augmentation in self.augmentations:
-                torch.manual_seed(augmentation.seed)
-                image_tensor = augmentation.forward_mask(image_tensor)
-        return image_tensor
-
-    def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
-        return NotImplemented  # determinism forbids running under other seed
-
-    def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
-        return NotImplemented  # determinism forbids running under other seed
-
-    def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        return NotImplemented  # determinism forbids running under other seed
-
-    def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
-        return NotImplemented  # determinism forbids running under other seed
-
-    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
-                           compute_img: bool) -> PointCloudsImages:
-        return NotImplemented  # determinism forbids running under other seed
-
-    @classmethod
-    def create(cls, augmentation_list):
-        ridx = cls.__qualname__.rfind("_")
-        if ridx == -1:
-            cls_oldname = cls.__qualname__
-        else:
-            cls_oldname = cls.__qualname__[:ridx]
-        new_cls_name = f"{cls_oldname}_{torch.randint(1000000, 9000000, (1,)).item()}"
-        new_cls = type(new_cls_name, (cls,), {"augmentation_list": augmentation_list,
-                                              "aumentation_instance_list": [aug() for aug in augmentation_list]})
-        return new_cls
-
-    @classmethod
-    def get_distributions(cls, copy: bool = True):
-        res = {}
-        for n, contained_augmentation in enumerate(cls.augmentation_list):
-            aug_name = f"{contained_augmentation.__qualname__}{n}"
-            res.update({f"{aug_name}: {k}": v for k, v in contained_augmentation.get_distributions(copy=copy).items()})
-        return res
-
-
-class AugmentationChoice(DeterministicImageAugmentation):
-    r"""Select randomly among many augmentations.
-
-    .. figure :: _static/example_images/AugmentationChoice.png
-
-        Random choice of perspective and plasma-brightness augmentations
-
-        .. code-block :: python
-
-            augmentation_factory = tormentor.RandomPerspective ^ tormentor.RandomPlasmaBrightness
-            augmentation = augmentation_factory()
-            augmented_image = augmentation(image)
-    """
-
-    @classmethod
-    def create(cls, augmentation_list, requires_grad=False):
-        new_parameters = {"choice": Categorical(len(augmentation_list)), "available_augmentations": augmentation_list}
-        for augmentation in augmentation_list:
-            class_name = str(augmentation).split(".")[-1][:-2]
-            cls_distributions = augmentation.get_distributions()
-            cls_distributions = {f"{class_name}_{k}": v for k, v in cls_distributions.items()}
-            new_parameters.update(cls_distributions)
-        for cls_distribution in cls_distributions.values():
-            for parameter in cls_distribution.get_distribution_parameters().values():
-                parameter.requires_grad_(requires_grad)
-        ridx = cls.__qualname__.rfind("_")
-        if ridx == -1:
-            cls_oldname = cls.__qualname__
-        else:
-            cls_oldname = cls.__qualname__[:ridx]
-        new_cls_name = f"{cls_oldname}_{torch.randint(1000000, 9000000, (1,)).item()}"
-        new_cls = type(new_cls_name, (cls,), new_parameters)
-        return new_cls
-
-    def forward_sampling_field(self, coords: SamplingField):
-        batch_sz = coords[0].size(0)
-        augmentation_ids = type(self).choice(batch_sz)
-        augmented_batch_x = []
-        augmented_batch_y = []
-        for sample_n in range(batch_sz):
-            sample_coords = coords[0][sample_n: sample_n + 1, :, :], coords[1][sample_n: sample_n + 1, :, :]
-            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
-            sample_x, sample_y = augmentation.forward_sampling_field(sample_coords)
-            augmented_batch_x.append(sample_x)
-            augmented_batch_y.append(sample_y)
-        augmented_batch_x = torch.cat(augmented_batch_x, dim=0)
-        augmented_batch_y = torch.cat(augmented_batch_y, dim=0)
-        return augmented_batch_x, augmented_batch_y
-
-    def forward_img(self, batch_tensor):
-        batch_sz = batch_tensor.size(0)
-        augmentation_ids = type(self).choice(batch_sz)
-        augmented_batch = []
-        for sample_n in range(batch_sz):
-            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
-            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
-            augmented_sample = augmentation.forward_img(sample_tensor)
-            augmented_batch.append(augmented_sample)
-        augmented_batch = torch.cat(augmented_batch, dim=0)
-        return augmented_batch
-
-    def forward_mask(self, batch_tensor):
-        batch_sz = batch_tensor.size(0)
-        augmentation_ids = type(self).choice(batch_sz)
-        augmented_batch = []
-        for sample_n in range(batch_sz):
-            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
-            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
-            augmented_sample = augmentation.forward_mask(sample_tensor)
-            augmented_batch.append(augmented_sample)
-        augmented_batch = torch.cat(augmented_batch, dim=0)
-        return augmented_batch
-
-    def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
-                           compute_img: bool) -> PointCloudsImages:
-        batch_sz = batch_tensor.size(0)
-        augmentation_ids = type(self).choice(batch_sz)
-        augmented_batch = []
-        augmented_pcl = []
-        for sample_n in range(batch_sz):
-            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
-            pc_onelist = pcl[sample_n: sample_n + 1]
-            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
-            aug_pc_onelist, augmented_sample = augmentation.forward_pointcloud(pc_onelist, sample_tensor, compute_img)
-            augmented_batch.append(augmented_sample)
-            augmented_pcl = augmented_pcl + aug_pc_onelist
-        if compute_img:
-            augmented_batch = torch.cat(augmented_batch, dim=0)
-            return augmented_pcl, augmented_batch
-        else:
-            return augmented_pcl, batch_tensor
