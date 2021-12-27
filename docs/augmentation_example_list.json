@@ -1,5 +1,5 @@
 {
-  "AugmentationCascade": "tormentor.RandomPerspective & tormentor.RandomPlasmaBrightness",
+  "AugmentationCascade": "tormentor.RandomPerspective |  tormentor.RandomPlasmaBrightness",
   "AugmentationChoice": "tormentor.RandomPerspective ^ tormentor.RandomPlasmaBrightness",
   "Brightness": "tormentor.Brightness",
   "ColorJitter": "tormentor.ColorJitter",
