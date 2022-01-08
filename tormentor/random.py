@@ -42,8 +42,8 @@ class Distribution(torch.nn.Module):
 class Uniform(Distribution):
     def __init__(self, value_range: TupleRange = (0.0, 1.0), do_rsample=False):
         super().__init__(do_rsample=do_rsample)
-        self.min = torch.nn.Parameter(torch.Tensor([value_range[0]]))
-        self.max = torch.nn.Parameter(torch.Tensor([value_range[1]]))
+        self.min = torch.nn.Parameter(torch.Tensor([value_range[0]]), requires_grad=True)
+        self.max = torch.nn.Parameter(torch.Tensor([value_range[1]]), requires_grad=True)
         self.distribution = torch.distributions.Uniform(low=self.min, high=self.max)
         self.do_rsample = do_rsample
 

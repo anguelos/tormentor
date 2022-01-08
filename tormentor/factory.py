@@ -1,11 +1,8 @@
-from typing import Any
-
-import torch
-from .base_augmentation import DeterministicImageAugmentation, AugmentationChoice, AugmentationCascade
+from .base_augmentation import DeterministicImageAugmentation
+from .augmentation_choice import AugmentationChoice
+from .augmentation_cascade import AugmentationCascade
 from .resizing_augmentation import ResizingAugmentation, PadCropTo
 
-from torch import Tensor
-from typing import Iterator, Tuple
 
 class AugmentationFactory(object):
     """Class that wraps augmentation classes
