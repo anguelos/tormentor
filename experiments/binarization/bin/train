@@ -1,0 +1,174 @@
+import fargv
+import dibco
+import sys
+import tormentor
+import torch
+from torch import nn, autograd, optim
+from torch.utils.data import DataLoader
+import iunets
+import time
+import tqdm
+import torch.nn.functional as F
+import numpy as np
+from PIL import Image
+import pathlib
+import tormentor
+from bunet import BUNet
+
+
+def binarization_fscores(retrieved, relevant, epsilon=.0000000001):
+    """Measures binarization FScores for one or more samples
+
+    Args:
+        retrieved (torch.tensor): The predictions tensor where 0 is the background and 1 is the foreground. The tensor represent a batch sized either [BxHxW] or [Bx1xHxW].
+        relevant (torch.tensor): The ground-truth tensor where 0 is the background and 1 is the foreground. The tensor represent a batch sized either [BxHxW] or [Bx1xHxW].
+        epsilon (float, optional): A value added to the nominator and the denominator to deal with numerical instabillity. Defaults to .0000000001.
+
+    Returns:
+        (torch.Tensor, torch.Tensor, torch.Tensor): A tuple of 1D torch tensors with the fscore, precision and recall of each sample.
+    """
+    assert retrieved.size() == relevant.size()
+    assert (len(retrieved.size()) == 3) or ((len(retrieved.size()) == 4))
+    if retrieved.size(1) == 2:
+        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]
+    if relevant.size(1) == 2:
+        relevant = relevant[:, 0, :, :] > relevant[:, 1, :, :]
+
+    batch_sz = retrieved.size(0)
+    retrieved = retrieved.view([batch_sz, -1])
+    relevant = relevant.view([batch_sz, -1])
+    true_positives = (retrieved * relevant)
+    precisions = ((true_positives.sum(dim=1).float()+epsilon)/(retrieved.sum(dim=1).float()+epsilon))
+    recalls = ((true_positives.sum(dim=1).float()+epsilon)/(relevant.sum(dim=1).float()+epsilon))
+    fscores = (2*precisions*recalls+epsilon)/(precisions+recalls+epsilon)
+    return fscores, precisions, recalls
+
+
+def train_epoch(net, dataloader, loss_fn, optimizer):
+    net.train(True)
+    device = next(net.parameters()).device
+    epoch_losses = []
+    epoch_fscores = []
+    t=time.time()
+    if len(net.train_epochs)>0:
+        desc=f"Training {len(net.train_epochs):5d} loss: {net.train_epochs[-1]['loss']:.6f} FM: {net.train_epochs[-1]['fscore']:.6f}"
+    else:
+        desc = 'NA'
+    for inputs, targets in tqdm.tqdm(dataloader, desc=desc):
+        inputs, targets = inputs.to(device), targets.to(device)
+        outputs = net(inputs)
+        loss = loss_fn(outputs, targets)
+        epoch_losses.append(loss.detach())
+        loss.sum().backward()
+        epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
+        optimizer.step()
+        optimizer.zero_grad()
+    total_time = time.time() - t
+    epoch_fscore = float(torch.cat(epoch_fscores, dim=0).mean())
+    epoch_loss = float(torch.stack(epoch_losses).mean())
+    net.train_epochs.append({"loss":epoch_loss, "fscore":epoch_fscore, "duration":total_time,"time":time.time()})
+
+
+def validate_epoch(net, dataloader, loss_fn):
+    with torch.no_grad():
+        net.train(False)
+        device = next(net.parameters()).device
+        epoch_losses = []
+        epoch_fscores = []
+        t=time.time()
+        if len(net.train_epochs)>0:
+            desc=f"Train loss: {net.train_epochs[-1]['loss']:.6f} FM: {net.train_epochs[-1]['fscore']:.6f}"
+        else:
+            desc = 'NA'
+        for inputs, targets in tqdm.tqdm(dataloader, desc=desc):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+            loss = loss_fn(outputs, targets)
+            epoch_losses.append(loss.detach())
+            epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
+        total_time = time.time() - t
+        epoch_fscore = float(torch.cat(epoch_fscores, dim=0).mean())
+        epoch_loss = float(torch.stack(epoch_losses).mean())
+        print(f"Validation {len(net.train_epochs):5d} loss: {epoch_loss:.6f} FM: {epoch_fscore:.6f}")
+        net.validation_epochs[len(net.train_epochs)] = {"loss":epoch_loss, "fscore":epoch_fscore, "duration":total_time,"time":time.time()}
+
+def save_images_infolder(image_list, folder):
+    pathlib.Path(folder).mkdir(parents=True, exist_ok=True)
+    for n, image in enumerate(image_list):
+        if isinstance(image, Image.Image):
+            filename = str(pathlib.Path(folder).joinpath(f"{n:05d}.png"))
+            image.save(filename)
+        elif isinstance(image, tuple):
+            images = image
+            for partition, image in enumerate(images):
+                filename = str(pathlib.Path(folder).joinpath(f"{n:05d}_{partition:02d}.png"))
+                image.save(filename)
+
+
+
+def load_dataset(dataset_name:str):
+    if dataset_name == "dibco2009":
+        return dibco.Dibco.Dibco2009()
+    elif dataset_name == "dibco2010":
+        return dibco.Dibco.Dibco2010()
+    elif dataset_name == "dibco2011":
+        return dibco.Dibco.Dibco2011()
+    elif dataset_name == "dibco2012":
+        return dibco.Dibco.Dibco2012()
+    elif dataset_name == "dibco2013":
+        return dibco.Dibco.Dibco2013()
+    else:
+        raise ValueError
+
+
+
+if __name__=="__main__":
+    params = {
+        "trainset":"dibco2009",
+        "validationset":"dibco2010",
+        "testset":"dibco2011",
+        "resume_fname":"binarisation.pt",
+        "lr":.01,
+        "epochs":100,
+        "batch_sz":1,
+        "input_channels":1,
+        "target_channels":2,
+        "save_freq":5,
+        "validation_freq":5,
+        "validation_dump_freq":0,
+        "validation_folder":"/tmp/validation_images",
+        "train_dump_freq":0,
+        "train_folder":"/tmp/train_images",
+        "device":"cuda"
+    }
+    
+    args, _ = fargv.fargv(params)
+    
+    trainset = load_dataset(args.trainset)
+    trainloader = DataLoader(trainset, batch_size=args.batch_sz)
+    augmentations = tormentor.RandomPlasmaShadow  ^ tormentor.RandomPlasmaContrast  ^ tormentor.RandomIdentity
+    trainloader = tormentor.AugmentedDataLoader(trainloader, augmentations, computation_device="cuda:1")
+    
+    validationset = load_dataset(args.validationset)
+    valloader = DataLoader(validationset, batch_size=args.batch_sz)
+    
+    net = BUNet.resume(args.resume_fname, input_channels=args.input_channels, target_channels=args.target_channels, device=args.device)
+    net.args_history[len(net.train_epochs)] = args
+    
+    optimizer = optim.Adam(params=net.parameters(), lr=args.lr)
+    loss_fn = nn.BCEWithLogitsLoss()
+    if len(net.train_epochs) == 0:
+        validate_epoch(net, valloader, loss_fn)
+    for epoch in range(len(net.train_epochs), args.epochs):
+        train_epoch(net, trainloader, loss_fn, optimizer)
+        if epoch % args.validation_freq == 0 or epoch == args.epochs -1:
+            validate_epoch(net, valloader, loss_fn)
+        if args.validation_dump_freq > 0 and epoch % args.validation_dump_freq == 0 or epoch == args.epochs -1:
+            images = net.binarize(valloader)
+            save_images_infolder(images, args.validation_folder)
+        if args.train_dump_freq > 0 and epoch % args.train_dump_freq == 0 or epoch == args.epochs -1:
+            images = net.binarize(trainloader)
+            save_images_infolder(images, args.train_folder)
+
+        if epoch % args.save_freq == 0 or epoch == args.epochs -1:
+            net.save(args.resume_fname)
