@@ -1,7 +1,9 @@
 import torch
 
 from diamond_square import functional_diamond_square
-from .base_augmentation import SpatialImageAugmentation, SamplingField, AugmentationState, StaticImageAugmentation
+from .deterministic_image_augmentation import SamplingField, AugmentationState
+from .spatial_image_augmentation import SpatialImageAugmentation
+from .static_image_augmentation import StaticImageAugmentation
 from .random import Uniform, Bernoulli
 
 

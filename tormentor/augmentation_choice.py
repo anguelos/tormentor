@@ -1,5 +1,5 @@
 from .random import Categorical
-from .base_augmentation import DeterministicImageAugmentation, SamplingField, PointCloudList, PointCloudsImages
+from .deterministic_image_augmentation import DeterministicImageAugmentation, SamplingField, PointCloudList, PointCloudsImages
 import torch
 
 class AugmentationChoice(DeterministicImageAugmentation):

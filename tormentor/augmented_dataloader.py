@@ -1,5 +1,5 @@
 from typing import Tuple, Union, List, Type
-from .base_augmentation import DeterministicImageAugmentation
+from .deterministic_image_augmentation import DeterministicImageAugmentation
 from .factory import AugmentationFactory
 import torch
 
@@ -7,6 +7,8 @@ Tensors = Union[List[torch.Tensor], Tuple[torch.Tensor]]
 
 class AugmentedDataLoader(torch.utils.data.DataLoader):
     r"""Wraps a dataloader in order to create an augmented dataloader.
+
+    By default, augmentation is run under a torch.no_grad context in order to lighten up computation.
 
     .. code-block :: python
 
@@ -38,14 +40,14 @@ class AugmentedDataLoader(torch.utils.data.DataLoader):
         batch = [tensor.to(process_device) for tensor in batch]
         input_imgs = batch[0]
         img_size = input_imgs.size()
-        mask_size = (img_size[0], 1, img_size[2], img_size[3])
+        mask_sizes = ((img_size[0], 1, img_size[2], img_size[3]), (img_size[0], 2, img_size[2], img_size[3]))
         batch_sz, nb_channels, width, height = input_imgs.size()
         augmented_batch = []
         with torch.no_grad():
             for datum in batch:
                 if isinstance(datum, torch.Tensor) and datum.size() == img_size:
                     augmented_batch.append(augmentation(datum))
-                elif isinstance(datum, torch.Tensor) and datum.size() == mask_size:
+                elif isinstance(datum, torch.Tensor) and datum.size() in mask_sizes:
                     augmented_batch.append(augmentation(datum, is_mask=True))
                 else:
                     augmented_batch.append(datum)

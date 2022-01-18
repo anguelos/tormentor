@@ -13,8 +13,11 @@ import types
 
 from .augmented_dataloader import AugmentedDataLoader
 from .augmented_dataset import AugmentedDs, AugmentedCocoDs
-from .base_augmentation import StaticImageAugmentation, SpatialImageAugmentation, DeterministicImageAugmentation, \
-    Identity, create_sampling_field, apply_sampling_field
+from .deterministic_image_augmentation import DeterministicImageAugmentation
+from .sampling_fileds import create_sampling_field, apply_sampling_field
+from .static_image_augmentation import StaticImageAugmentation, Identity
+from .spatial_image_augmentation import SpatialImageAugmentation
+
 from .augmentation_cascade import AugmentationCascade
 from .augmentation_choice import AugmentationChoice
 from .color_augmentations import *

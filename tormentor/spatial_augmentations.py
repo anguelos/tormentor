@@ -1,7 +1,9 @@
 import kornia as K
 import torch
 
-from .base_augmentation import SpatialImageAugmentation, SamplingField, AugmentationState
+from .deterministic_image_augmentation import AugmentationState
+from .sampling_fileds import SamplingField
+from .spatial_image_augmentation import SpatialImageAugmentation
 from .random import Uniform, Bernoulli
 
 

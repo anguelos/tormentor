@@ -1,7 +1,8 @@
 import kornia as K
 
 from diamond_square import functional_diamond_square
-from .base_augmentation import StaticImageAugmentation, AugmentationState
+from .deterministic_image_augmentation import AugmentationState
+from .static_image_augmentation import StaticImageAugmentation
 from .random import *
 
 

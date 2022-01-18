@@ -1,7 +1,8 @@
 import torch
 
-from .base_augmentation import SamplingField, AugmentationState, DeterministicImageAugmentation, SpatialImageAugmentation
-from .random import Constant, Uniform, Categorical
+from .deterministic_image_augmentation import SamplingField, AugmentationState, DeterministicImageAugmentation
+from .spatial_image_augmentation import SpatialImageAugmentation
+from .random import Constant, Uniform
 
 
 class ResizingAugmentation(SpatialImageAugmentation):

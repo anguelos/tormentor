@@ -59,12 +59,13 @@ class Uniform(Distribution):
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         self.to(device)
+        if not hasattr(size, "__getitem__"):
+            size = [size]
         if self.do_rsample:
-            raise NotImplemented
+            return self.distribution.rsample(size).view(size).to(device)
         else:
-            if not hasattr(size, "__getitem__"):
-                size = [size]
             return self.distribution.sample(size).view(size).to(device)
+
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -90,11 +91,11 @@ class Constant(Distribution):
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         self.to(device)
+        if not hasattr(size, "__getitem__"):
+            size = (size,)
         if self.do_rsample:
-            raise NotImplemented
+            return self.value.repeat(size).to(device)
         else:
-            if not hasattr(size, "__getitem__"):
-                size = (size,)
             return self.value.repeat(size).to(device)
 
     def copy(self, do_rsample=None):
