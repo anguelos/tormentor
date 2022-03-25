@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import tormentor # used by the command line argument
 
+import tormentor # used by the command line argument
+from tormentor import *
 import PIL
 import PyQt5
 import PyQt5.QtWidgets as qwidgets
@@ -43,8 +44,8 @@ class UniformDistributionTweaker(qwidgets.QWidget):
     def update_distribution(self):
         cur_min = self.int2float(self.min_slider.value())
         cur_max = self.int2float(self.max_slider.value())
-        self.distribution.min[0] = cur_min
-        self.distribution.max[0] = cur_max
+        self.distribution.min.data[0] = cur_min
+        self.distribution.max.data[0] = cur_max
 
     @pyqtSlot(int)
     def max_values_changed(self, value):
@@ -65,8 +66,8 @@ class UniformDistributionTweaker(qwidgets.QWidget):
         self.max_slider.setMaximum(self.steps)
         self.min_slider.setTickPosition(qwidgets.QSlider.TicksAbove)
         self.max_slider.setTickPosition(qwidgets.QSlider.TicksBelow)
-        self.min_slider.setValue(self.steps / 3)
-        self.max_slider.setValue(2 * self.steps / 3)
+        self.min_slider.setValue(int(self.steps / 3))
+        self.max_slider.setValue(int(2 * self.steps / 3))
         self.display_values = qwidgets.QLineEdit()
         self.display_values.setReadOnly(True)
 
@@ -129,7 +130,12 @@ class AugmentationTweaker(qwidgets.QWidget):
         log = f"{self.torch_img.size(-1)} x {self.torch_img.size(-2)} x {self.replicates} {1000*dur:.3} msec."
         self.setWindowTitle(log)
         if self.show_input:
-            batch_tensor[0, :, :, :] = self.torch_img
+            batch_tensor[0, :, :, :] = 0
+            print(self.torch_img.size())
+            print(batch_tensor.size())
+            crop_width = min(self.torch_img.size(-1), batch_tensor.size(-1))
+            crop_height = min(self.torch_img.size(-2), batch_tensor.size(-2))
+            batch_tensor[0, :, :crop_height, :crop_width] = self.torch_img[:, :crop_height, :crop_width]
         batch_tensor = batch_tensor.to("cpu")
         im = self.toPIL(batch_tensor)
         im = im.convert("RGBA")
@@ -145,8 +151,6 @@ class AugmentationTweaker(qwidgets.QWidget):
         vbox.addWidget(self.augmentation_str_box)
         self.img_label = qwidgets.QLabel()
         vbox.addWidget(self.img_label)
-
-
 
         scroll_vbox = qwidgets.QVBoxLayout()
         group_box = qwidgets.QGroupBox()
@@ -172,12 +176,13 @@ class AugmentationTweaker(qwidgets.QWidget):
         self.show()
 
 
-params = {"image": "./Lenna.png",
+params = {"image": "./test_card_small.png",
           "replicates": 8,
           "ncol": 4,
           "device": "cuda",
           "show_input": True,
           "augmentation": "tormentor.Wrap"}
+
 
 if __name__ == "__main__":
     params, _ = fargv.fargv(params, return_named_tuple=True)

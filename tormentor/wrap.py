@@ -5,7 +5,8 @@ from .deterministic_image_augmentation import SamplingField, AugmentationState
 from .spatial_image_augmentation import SpatialImageAugmentation
 from .static_image_augmentation import StaticImageAugmentation
 from .random import Uniform, Bernoulli
-
+from .spatial_augmentations import Perspective
+from .sampling_fileds import create_sampling_field, apply_sampling_field
 
 class Wrap(SpatialImageAugmentation):
     r"""Augmentation Wrap.
@@ -48,7 +49,47 @@ class Wrap(SpatialImageAugmentation):
         return field_x + plasma_x[:, :, :], field_y + plasma_y[:, :, :]
 
 
-class Shred(StaticImageAugmentation):
+# class Shred(StaticImageAugmentation):
+#     r"""Augmentation Shred.
+#
+#
+#     Distributions:
+#         ``roughness``: Quantification of the local inconsistency of the distortion effect.
+#         ``erase_percentile``: Quantification of the surface that will be erased.
+#         ``inside``: If True
+#
+#     .. image:: _static/example_images/Shred.png
+#     """
+#     roughness = Uniform(value_range=(.4, .8))
+#     inside = Bernoulli(prob=.5)
+#     erase_percentile = Uniform(value_range=(.0, .5))
+#
+#     def generate_batch_state(self, image_batch: torch.Tensor) -> AugmentationState:
+#         batch_sz, _, width, height = image_batch.size()
+#         roughness = type(self).roughness(batch_sz, device=image_batch.device)
+#         plasma_sz = (batch_sz, 1, width, height)
+#         plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=image_batch.device)
+#         inside = type(self).inside(batch_sz, device=image_batch.device).float()
+#         erase_percentile = type(self).erase_percentile(batch_sz, device=image_batch.device)
+#         return plasma, inside, erase_percentile
+#
+#     @classmethod
+#     def functional_image(cls, image_batch: torch.Tensor, plasma: torch.FloatTensor, inside: torch.FloatTensor,
+#                                   erase_percentile: torch.FloatTensor) -> torch.Tensor:
+#         inside = inside.view(-1, 1, 1, 1)
+#         erase_percentile = erase_percentile.view(-1, 1, 1, 1)
+#         plasma = inside * plasma + (1 - inside) * (1 - plasma)
+#         plasma_pixels = plasma.view(plasma.size(0), -1)
+#         thresholds = []
+#         for n in range(plasma_pixels.size(0)):
+#             thresholds.append(torch.kthvalue(plasma_pixels[n], int(plasma_pixels.size(1) * erase_percentile[n]))[0])
+#         thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1).to(plasma.device)
+#         erase = (plasma < thresholds).float()
+#         return image_batch * (1 - erase)
+#
+
+
+class ShredInside(StaticImageAugmentation):
     r"""Augmentation Shred.
 
 
@@ -60,24 +101,22 @@ class Shred(StaticImageAugmentation):
     .. image:: _static/example_images/Shred.png
     """
     roughness = Uniform(value_range=(.4, .8))
-    inside = Bernoulli(prob=.5)
-    erase_percentile = Uniform(value_range=(.0, .5))
+    erase_percentile = Uniform(value_range=(.0, .2))
 
     def generate_batch_state(self, image_batch: torch.Tensor) -> AugmentationState:
         batch_sz, _, width, height = image_batch.size()
         roughness = type(self).roughness(batch_sz, device=image_batch.device)
         plasma_sz = (batch_sz, 1, width, height)
         plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=image_batch.device)
-        inside = type(self).inside(batch_sz, device=image_batch.device).float()
         erase_percentile = type(self).erase_percentile(batch_sz, device=image_batch.device)
-        return plasma, inside, erase_percentile
+        return plasma, erase_percentile
 
     @classmethod
-    def functional_image(cls, image_batch: torch.Tensor, plasma: torch.FloatTensor, inside: torch.FloatTensor,
-                                  erase_percentile: torch.FloatTensor) -> torch.Tensor:
-        inside = inside.view(-1, 1, 1, 1)
+    def functional_image(cls, image_batch: torch.Tensor, plasma: torch.FloatTensor,
+                         erase_percentile: torch.FloatTensor) -> torch.Tensor:
+        #inside = inside.view(-1, 1, 1, 1)
         erase_percentile = erase_percentile.view(-1, 1, 1, 1)
-        plasma = inside * plasma + (1 - inside) * (1 - plasma)
+        #plasma = inside * plasma + (1 - inside) * (1 - plasma)
         plasma_pixels = plasma.view(plasma.size(0), -1)
         thresholds = []
         for n in range(plasma_pixels.size(0)):
@@ -85,3 +124,41 @@ class Shred(StaticImageAugmentation):
         thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1).to(plasma.device)
         erase = (plasma < thresholds).float()
         return image_batch * (1 - erase)
+
+
+class ShredOutside(StaticImageAugmentation):
+    r"""Augmentation Shred.
+
+
+    Distributions:
+        ``roughness``: Quantification of the local inconsistency of the distortion effect.
+        ``erase_percentile``: Quantification of the surface that will be erased.
+        ``inside``: If True
+
+    .. image:: _static/example_images/Shred.png
+    """
+    roughness = Uniform(value_range=(.1, .7))
+    erase_percentile = Uniform(value_range=(.0, .5))
+
+    def generate_batch_state(self, image_batch: torch.Tensor) -> AugmentationState:
+        batch_sz, _, width, height = image_batch.size()
+        roughness = type(self).roughness(batch_sz, device=image_batch.device)
+        plasma_sz = (batch_sz, 1, width, height)
+        plasma = functional_diamond_square(plasma_sz, roughness=roughness, device=image_batch.device)
+        erase_percentile = type(self).erase_percentile(batch_sz, device=image_batch.device)
+        return plasma, erase_percentile
+
+    @classmethod
+    def functional_image(cls, image_batch: torch.Tensor, plasma: torch.FloatTensor,
+                         erase_percentile: torch.FloatTensor) -> torch.Tensor:
+        #inside = inside.view(-1, 1, 1, 1)
+        erase_percentile = erase_percentile.view(-1, 1, 1, 1)
+        #plasma = inside * plasma + (1 - inside) * (1 - plasma)
+        plasma_pixels = 1 - plasma.view(plasma.size(0), -1)
+        thresholds = []
+        for n in range(plasma_pixels.size(0)):
+            thresholds.append(torch.kthvalue(plasma_pixels[n], int(plasma_pixels.size(1) * erase_percentile[n]))[0])
+        thresholds = torch.Tensor(thresholds).view(-1, 1, 1, 1).to(plasma.device)
+        erase = (plasma < thresholds).float()
+        return image_batch * (1 - erase)
+

@@ -43,16 +43,15 @@ class BUNet(nn.Module):
             return net
         except FileNotFoundError:
             return BUNet(**kwargs)
-        
 
-    def __init__(self, input_channels=3, target_channels=2, channels=(64,128,256,384), stack_size=2, device="cuda") -> None:
+    def __init__(self, input_channels=3, target_channels=2, channels=(64, 128, 256, 384), stack_size=2, device="cuda") -> None:
         super().__init__()
         self.input2iunet = nn.Conv2d(in_channels=input_channels, out_channels=channels[0], kernel_size=3, padding=1)
         self.iunet2output = nn.Conv2d(in_channels=channels[0], out_channels=target_channels, kernel_size=3, padding=1)
         self.iunet = iunets.iUNet(in_channels=channels[0], channels=channels[1:], architecture=(stack_size,)*(len(channels)-1), dim=2)
         self.train_epochs = []
         self.validation_epochs = {}
-        self.constructor_params = {"input_channels":input_channels, "target_channels":target_channels, "channels":channels, "stack_size":stack_size, "device":device}
+        self.constructor_params = {"input_channels": input_channels, "target_channels":target_channels, "channels": channels, "stack_size":stack_size, "device":device}
         self.args_history={}
         self.to(device=device)
 
@@ -72,7 +71,7 @@ class BUNet(nn.Module):
                 assert len(input.size()) == 4
                 input = input.to(next(self.parameters()).device)
                 output = self.forward(input)
-                output = (F.softmax(output, dim=1)[0, 1, :,:]).cpu().numpy()
+                output = (F.softmax(output, dim=1)[0, 1, :,:])
                 return output
                 #output = (output > .5).astype("float")
                 output_img = Image.fromarray(np.uint8(output*255))

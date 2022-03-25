@@ -17,7 +17,7 @@ class AugmentationChoice(DeterministicImageAugmentation):
     """
 
     @classmethod
-    def create(cls, augmentation_list, requires_grad=False):
+    def create(cls, augmentation_list, requires_grad=False, new_cls_name=None):
         new_parameters = {"choice": Categorical(len(augmentation_list)), "available_augmentations": augmentation_list}
         for augmentation in augmentation_list:
             class_name = str(augmentation).split(".")[-1][:-2]
@@ -32,7 +32,8 @@ class AugmentationChoice(DeterministicImageAugmentation):
             cls_oldname = cls.__qualname__
         else:
             cls_oldname = cls.__qualname__[:ridx]
-        new_cls_name = f"{cls_oldname}_{torch.randint(1000000, 9000000, (1,)).item()}"
+        if new_cls_name is None:
+            new_cls_name = f"{cls_oldname}_{torch.randint(1000000, 9000000, (1,)).item()}"
         new_cls = type(new_cls_name, (cls,), new_parameters)
         return new_cls
 
@@ -62,6 +63,18 @@ class AugmentationChoice(DeterministicImageAugmentation):
             augmented_batch.append(augmented_sample)
         augmented_batch = torch.cat(augmented_batch, dim=0)
         return augmented_batch
+
+
+    def forward_img_path_probabilities(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        batch_sz = batch_tensor.size(0)
+        augmentation_ids = type(self).choice(batch_sz)
+        probs = self.choice.probs[0, augmentation_ids]
+        for sample_n in range(batch_sz):
+            sample_tensor = batch_tensor[sample_n:sample_n + 1, :, :, :]
+            augmentation = type(self).available_augmentations[augmentation_ids[sample_n]]()
+            probs[sample_n] *= augmentation.forward_img_path_probabilities(sample_tensor)[0]
+        return probs
+
 
     def forward_mask(self, batch_tensor):
         batch_sz = batch_tensor.size(0)
@@ -93,3 +106,7 @@ class AugmentationChoice(DeterministicImageAugmentation):
             return augmented_pcl, augmented_batch
         else:
             return augmented_pcl, batch_tensor
+
+
+
+

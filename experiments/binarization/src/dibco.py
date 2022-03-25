@@ -8,6 +8,11 @@ from subprocess import getoutput as shell_stdout
 import os
 import errno
 import torch
+import sys
+
+
+def warn(*args):
+    sys.stderr.write(" ".join([str(arg) for arg in args])+"\n")
 
 
 def _get_dict(compressed_stream, filter_gt=False, filter_nongt=False):
@@ -62,9 +67,9 @@ def mkdir_p(path):
 def resumable_download(url,save_dir):
     mkdir_p(save_dir)
     download_cmd = 'wget --directory-prefix=%s -c %s' % (save_dir, url)
-    print("Downloading {} ... ".format(url))
+    warn("Downloading {} ... ".format(url))
     shell_stdout(download_cmd)
-    print("done")
+    warn("done")
     return os.path.join(save_dir,url.split("/")[-1])
 
 
@@ -134,7 +139,7 @@ class Dibco:
     urls = {
         "2009_HW": ["http://rr.visioner.ca/assets/dibco_mirror/DIBC02009_Test_images-handwritten.rar",
                     "http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009-GT-Test-images_handwritten.rar"],
-        "2009_P": ["http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009_Test_images-printed.rar",
+            "2009_P": ["http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009_Test_images-printed.rar",
                    "http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009-GT-Test-images_printed.rar"],
         "2010": ["http://rr.visioner.ca/assets/dibco_mirror/H_DIBCO2010_test_images.rar",
                  "http://rr.visioner.ca/assets/dibco_mirror/H_DIBCO2010_GT.rar"],
@@ -242,7 +247,7 @@ class Dibco:
                 if not os.path.isfile(archive_fname):
                     resumable_download(url, root)
                 else:
-                    print(archive_fname," found in cache.")
+                    warn(archive_fname," found in cache.")
             if len(Dibco.urls[partition]) == 2:
                 if Dibco.urls[partition][0].endswith(".rar"):
                     input_rar = rarfile.RarFile(root + "/" + Dibco.urls[partition][0].split("/")[-1])
@@ -305,3 +310,12 @@ class Dibco:
         res.inputs = self.inputs + other.inputs
         res.gt = self.gt + other.gt
         return res
+
+all_dibco_keys = set(Dibco.urls.keys())
+#all_dibco = {k: Dibco(partitions=[k]) for k in all_dibco_keys}
+
+l1out_partitions = {}
+for k in all_dibco_keys:
+    trainset = sorted(all_dibco_keys - set([k]))
+    trainset, validationset = trainset[:-1], trainset[-1:]
+    l1out_partitions[k] = {"train": trainset, "val": validationset, "test": k}

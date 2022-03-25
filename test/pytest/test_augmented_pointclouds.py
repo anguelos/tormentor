@@ -85,7 +85,7 @@ def helper_test_pointcoulds_as_images(augmentation_cls):
                 assert (crude_y - precise_y) ** 2 < tolerance ** 2
 
 
-inaplicable_augmentations = {tormentor.RemoveRectangle, tormentor.Shred,
+inaplicable_augmentations = {tormentor.RemoveRectangle, tormentor.Shred, tormentor.ShredOutside, tormentor.ShredInside,
                              tormentor.CropTo, tormentor.PadTo, tormentor.CropTo, tormentor.PadCropTo,
                              tormentor.ElasticTransform, tormentor.Identity}
 testable_augmentations = list(tormentor._leaf_augmentations - inaplicable_augmentations)

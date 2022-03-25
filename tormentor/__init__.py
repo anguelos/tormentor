@@ -27,7 +27,7 @@ from .resizing_augmentation import *
 from .spatial_augmentations import *
 # from .backgrounds import ConstantBackground, NormalNoiseBackground, UniformNoiseBackground, PlasmaBackground
 from .util import debug_pattern, render_singleline_text
-from .wrap import Wrap, Shred
+from .wrap import Wrap, ShredInside, ShredOutside
 from .version import __version__
 
 reset_all_seeds = DeterministicImageAugmentation.reset_all_seeds
@@ -51,6 +51,17 @@ def __pipe__aug(self, other):
 for aug in _leaf_augmentations:
     aug.__xor__ = types.MethodType(__xor__aug, aug)
     aug.__or__ = types.MethodType(__pipe__aug, aug)
+
+## Composite augmentations
+#print(repr(FlipHorizontal.aug_id))
+#print(repr(FlipVertical.aug_id))
+#print(repr(Transpose.aug_id))
+#print(repr(Identity.aug_id))
+#Flip = AugmentationChoice.create([AugmentationFactory(FlipHorizontal), AugmentationFactory(FlipVertical), AugmentationFactory(Transpose), AugmentationFactory(Identity)], new_cls_name="Flip")
+Shred = AugmentationChoice.create([AugmentationFactory(ShredInside), AugmentationFactory(ShredOutside)], new_cls_name="Shred")
+#Invert = AugmentationChoice.create([AugmentationFactory(InvertLuminance), AugmentationFactory(Identity)], new_cls_name="Invert")
+_leaf_augmentations = _leaf_augmentations.union(set([Flip, Shred, Invert]))
+
 
 factory_dict = {f"Random{aug.__name__}": AugmentationFactory(aug) for aug in _leaf_augmentations}
 all_factory_names = list(factory_dict.keys())
