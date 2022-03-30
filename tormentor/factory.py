@@ -1,4 +1,4 @@
-from .base_augmentation import DeterministicImageAugmentation
+from .deterministic_image_augmentation import DeterministicImageAugmentation
 from .augmentation_choice import AugmentationChoice
 from .augmentation_cascade import AugmentationCascade
 from .resizing_augmentation import ResizingAugmentation, PadCropTo

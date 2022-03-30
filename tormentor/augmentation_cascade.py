@@ -1,5 +1,5 @@
 from .random import Categorical
-from .base_augmentation import DeterministicImageAugmentation, SamplingField, PointCloudList, PointCloudsImages, random_fork
+from .deterministic_image_augmentation import DeterministicImageAugmentation, SamplingField, PointCloudList, PointCloudsImages, random_fork
 import torch
 
 
@@ -82,21 +82,57 @@ class AugmentationCascade(DeterministicImageAugmentation):
                 image_tensor = augmentation.forward_mask(image_tensor)
         return image_tensor
 
+    def forward_img_path_probabilities(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        device = batch_tensor.device
+        probs = torch.ones(batch_tensor.size(0), device=device)
+        with random_fork(devices=(device,)):
+            for augmentation in self.augmentations:
+                torch.manual_seed(augmentation.seed)
+                probs = probs * augmentation.forward_img_path_probabillities(batch_tensor)
+        return probs
+
+
     def forward_sampling_field(self, coords: SamplingField) -> SamplingField:
-        return NotImplemented  # determinism forbids running under other seed
+        device = coords[0].device
+        with random_fork(devices=(device,)):
+            for augmentation in self.augmentations:
+                torch.manual_seed(augmentation.seed)
+                coords = augmentation.forward_img(coords)
+        return coords
+        # raise NotImplemented  # determinism forbids running under other seed
 
     def forward_bboxes(self, bboxes: torch.FloatTensor, image_tensor=None, width_height=None) -> torch.FloatTensor:
-        return NotImplemented  # determinism forbids running under other seed
+        #device = bboxes.device
+        #with random_fork(devices=(device,)):
+        #    for augmentation in self.augmentations:
+        #        torch.manual_seed(augmentation.seed)
+        #        batch_tensor = augmentation.forward_img(batch_tensor)
+        # return batch_tensor
+        # TODO(anguelos) double check this, it is quite dangerous
+        raise NotImplemented  # determinism forbids running under other seed
 
     def forward_img(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
-        return NotImplemented  # determinism forbids running under other seed
+        device = batch_tensor.device
+        with random_fork(devices=(device,)):
+            for augmentation in self.augmentations:
+                torch.manual_seed(augmentation.seed)
+                batch_tensor = augmentation.forward_img(batch_tensor)
+        return batch_tensor
+        # raise NotImplemented  # determinism forbids running under other seed
 
     def forward_mask(self, batch_tensor: torch.LongTensor) -> torch.LongTensor:
-        return NotImplemented  # determinism forbids running under other seed
+        device = batch_tensor.device
+        with random_fork(devices=(device,)):
+            for augmentation in self.augmentations:
+                torch.manual_seed(augmentation.seed)
+                batch_tensor = augmentation.forward_mask(batch_tensor)
+        return batch_tensor
+        # raise NotImplemented  # determinism forbids running under other seed
 
     def forward_pointcloud(self, pcl: PointCloudList, batch_tensor: torch.FloatTensor,
                            compute_img: bool) -> PointCloudsImages:
-        return NotImplemented  # determinism forbids running under other seed
+        # TODO(anguelos) double check this, it is quite dangerous
+        raise NotImplemented  # determinism forbids running under other seed
 
     @classmethod
     def create(cls, augmentation_list):

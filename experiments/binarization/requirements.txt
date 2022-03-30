@@ -1,0 +1,10 @@
+numpy
+matplotlib
+seaborn
+rarfile
+py7zr
+gdown
+rarfile 
+fargv
+iunets
+scikit-image

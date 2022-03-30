@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+
+import fargv
+from collections import defaultdict
+
+augmentations = {
+    "noaug":" -augmentation_str 'tormentor.Identity' ",
+    "simpleaug":" -augmentation_str 'tormentor.RandomFlip ^ tormentor.RandomRotate ^ tormentor.RandomBrightness ^ tormentor.Invert ^ tormentor.Saturation ^ tormentor.Identity' ",
+    "plasmaaug":" -augmentation_str 'tormentor.RandomShredInside  ^ tormentor.RandomShredOutside ^ tormentor.RandomPlasmaBrightness ^  tormentor.RandomPlasmaContrast ^ tormentor.RandomWrap ^ tormentor.Identity' ",
+}
+
+archs = {
+    "small": " -arch_size 'small' ",
+    "medium": " -arch_size 'medium' ",
+    "large": " -arch_size 'large' ",
+}
+
+lrs = {
+    "0100": " -lr 0.01 -epochs 100 ",
+    "0010": " -lr 0.001 -epochs 500 ",
+    "0001": " -lr 0.0001 -epochs 1500 ",
+}
+
+lr_depends = {
+    "0010":"0100",
+    "0001":"0010"
+}
+
+p={
+    'model_path': './models/bunet',
+    'params': ' -validation_dump_freq 5 -train_dump_freq 5 ',
+    'replicates': 5,
+    'makefile':'./Makefile'
+
+}
+args, _ = fargv.fargv(p)
+
+def get_target_deps_cmd(arch, augmentation, lr, replicate, params, model_path):
+    target = f"{model_path}_{arch}_{augmentation}_{lr}_{replicate}.pt"
+    if lr in lr_depends.keys():
+        depend, _, _ = get_target_deps_cmd(arch, augmentation, lr_depends[lr], replicate, params, model_path)
+        cmd=f"ls {target} || cp {depend} {target} ;./bin/train {archs[arch]} {lrs[lr]} {augmentations[augmentation]} {params} -resume_fname {target}"
+    else:
+        depend = ""
+        cmd=f"./bin/train {archs[arch]} {lrs[lr]} {augmentations[augmentation]} {params} -resume_fname {target}"
+    return target, depend, cmd
+
+trgt_lr_aug = defaultdict(lambda:[])
+trgt_archs_aug = defaultdict(lambda:[])
+trgt_archs_lr = defaultdict(lambda:[])
+
+trgt_lr = defaultdict(lambda:[])
+trgt_archs = defaultdict(lambda:[])
+trgt_aug = defaultdict(lambda:[])
+
+trgt_lr_aug_archs = defaultdict(lambda:[])
+all = defaultdict(lambda:[])
+constructs=[]
+meta=defaultdict(lambda :[])
+
+for replicate in range(args.replicates):
+    for arch in ['small', 'medium', 'large']:
+        for aug in ['noaug', 'simpleaug', 'plasmaaug']:
+            for lr in lrs.keys():
+                target, deps, cmd=get_target_deps_cmd(arch, aug, lr, replicate, args.params, args.model_path)
+                constructs.append(f"{target}:{deps}\n\t{cmd}\n\n")
+                meta[f"t_{lr}_{aug}_{replicate}"].append(target)
+                meta[f"t_{arch}_{aug}_{replicate}"].append(target)
+                meta[f"t_{arch}_{lr}_{replicate}"].append(target)
+
+                meta[f"t_{lr}_{replicate}"].append(target)
+                meta[f"t_{arch}_{replicate}"].append(target)
+                meta[f"t_{aug}_{replicate}"].append(target)
+
+                meta[f"t_{lr}_{aug}_{arch}_{replicate}"].append(target)
+                meta["all"].append(target)
+
+
+output_str = ''.join(constructs)
+output_str = '.EXPORT_ALL_VARIABLES:\n\nPYTHONPATH = ./src/\n\n'+'\n\n'.join([f"{k} : {' '.join(v)}" for k, v in sorted(meta.items())]) + "\n\n"+ output_str+"\n"
+open(args.makefile, "w").write(output_str)
+

@@ -14,6 +14,16 @@ class Distribution(torch.nn.Module):
         self.do_rsample = do_rsample
 
     def forward(self, size: TensorSize = 1, device="cpu"):
+        """Samples the probabillity distribution
+
+        Args:
+            size: the size to be sampled
+            device: the device on witch to sample
+
+        Returns:
+            a tuple with the sampled probabillity and path probabillities.
+
+        """
         raise NotImplementedError()
 
     def copy(self, do_rsample=None):
@@ -59,12 +69,13 @@ class Uniform(Distribution):
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         self.to(device)
+        if not hasattr(size, "__getitem__"):
+            size = [size]
         if self.do_rsample:
-            raise NotImplemented
+            return self.distribution.rsample(size).view(size).to(device)#, torch.ones(size, device=device)
         else:
-            if not hasattr(size, "__getitem__"):
-                size = [size]
-            return self.distribution.sample(size).view(size).to(device)
+            return self.distribution.sample(size).view(size).to(device)#, torch.ones(size, device=device)
+
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -90,12 +101,12 @@ class Constant(Distribution):
 
     def forward(self, size: TensorSize = 1, device="cpu") -> torch.Tensor:
         self.to(device)
+        if not hasattr(size, "__getitem__"):
+            size = (size,)
         if self.do_rsample:
-            raise NotImplemented
+            return self.value.repeat(size).to(device)#, torch.ones(size, device=device)
         else:
-            if not hasattr(size, "__getitem__"):
-                size = (size,)
-            return self.value.repeat(size).to(device)
+            return self.value.repeat(size).to(device)#, torch.ones(size, device=device)
 
     def copy(self, do_rsample=None):
         if do_rsample is None:
@@ -122,7 +133,10 @@ class Bernoulli(Distribution):
         else:
             if not hasattr(size, "__getitem__"):
                 size = [size]
-            return self.distribution.sample(size).view(size).to(device)
+            torch.ones(size, device=device)
+            res = self.distribution.sample(size).view(size).to(device)
+            #probs = (res * self.prob) + (1 - res) * (1 - self.prob)
+            return res#, probs
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__
@@ -165,7 +179,9 @@ class Categorical(Distribution):
         else:
             if not hasattr(size, "__getitem__"):
                 size = [size]
-            return self.distribution.sample(size).view(size).to(device)
+            result = self.distribution.sample(size).view(size).to(device)
+            #probs = self.probs.to(device)[0, result]
+            return result#, probs
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__
@@ -202,9 +218,9 @@ class Normal(Distribution):
         if not hasattr(size, "__getitem__"):
             size = [size]
         if self.do_rsample:
-            raise self.distribution.rsample(size).view(size).to(device)
+            return self.distribution.rsample(size).view(size).to(device)#, torch.ones(size=size, device=device)
         else:
-            return self.distribution.sample(size).view(size).to(device)
+            return self.distribution.sample(size).view(size).to(device)#, torch.ones(size=size, device=device)
 
     def __repr__(self) -> str:
         name = self.__class__.__qualname__

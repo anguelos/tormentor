@@ -64,8 +64,9 @@ def test_determinism(augmentation_cls):
 
 # any augmentation with a high probability of being an identity function should be removed
 testable_augmentations = list(
-    tormentor._leaf_augmentations - {tormentor.Flip, tormentor.Invert, tormentor.PadTo, tormentor.PadCropTo,
-                                     tormentor.CropTo, tormentor.Identity})
+    tormentor._leaf_augmentations - {tormentor.FlipVertical, tormentor.FlipHorizontal, tormentor.Transpose,
+                                     tormentor.InvertLuminance, tormentor.PadTo, tormentor.PadCropTo,
+                                     tormentor.CropTo, tormentor.Identity, tormentor.Flip, tormentor.Invert})
 testable_augmentations += [tormentor.AugmentationCascade.create([tormentor.Perspective, tormentor.Wrap])]
 testable_augmentations += [tormentor.AugmentationChoice.create([tormentor.Perspective, tormentor.PlasmaBrightness])]
 

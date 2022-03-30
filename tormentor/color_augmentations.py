@@ -1,8 +1,10 @@
 import kornia as K
 
+import torch
 from diamond_square import functional_diamond_square
-from .base_augmentation import StaticImageAugmentation, AugmentationState
-from .random import *
+from .deterministic_image_augmentation import AugmentationState
+from .static_image_augmentation import StaticImageAugmentation
+from .random import Uniform, Normal, Bernoulli
 
 
 class ColorAugmentation(StaticImageAugmentation):
@@ -32,7 +34,7 @@ class Invert(ColorAugmentation):
 
     .. image:: _static/example_images/Invert.png
    """
-    do_inversion = Bernoulli(.5)
+    do_inversion = Bernoulli()
 
     def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
         do_inversion = type(self).do_inversion(batch.size(0), device=batch.device).view(-1).float()
@@ -48,7 +50,43 @@ class Invert(ColorAugmentation):
         return out_batch
 
 
-class Brightness(ColorAugmentation):
+class InvertLuminance(ColorAugmentation):
+    r"""Performs color inversion in HSV colorspace for some images randomly selected.
+
+    .. image:: _static/example_images/Invert.png
+   """
+
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
+        return ()
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor) -> torch.FloatTensor:
+        hsv_batch = K.color.rgb_to_hsv(batch)
+        hsv_batch[:, 2:, :, :] = (1 - hsv_batch[:, 2:, :, :])
+        out_batch = K.color.hsv_to_rgb(hsv_batch)
+        return out_batch
+
+
+class LinearColor(ColorAugmentation):
+    r"""Changes the brightness of the image.
+
+    .. image:: _static/example_images/Brightness.png
+   """
+    a = Uniform((.6, 1.))
+    b = Uniform((.0, 1.))
+
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
+        a = type(self).a(batch.size(0), device=batch.device).view(-1)
+        b = type(self).b(batch.size(0), device=batch.device).view(-1)
+        return a, (1-a)*b
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, a: torch.FloatTensor, b: torch.FloatTensor) -> torch.FloatTensor:
+        return batch * a.view(-1,1,1,1) + b.view(-1,1,1,1)
+
+
+
+class KorniaBrightness(ColorAugmentation):
     r"""Changes the brightness of the image.
 
     .. image:: _static/example_images/Brightness.png
@@ -62,6 +100,56 @@ class Brightness(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
         return K.adjust_brightness(batch, brightness)
+
+class KorniaContrast(ColorAugmentation):
+    r"""Changes the contrast of the image.
+
+    .. image:: _static/example_images/Contrast.png
+   """
+    contrast = Uniform((0.0, 1.0))
+
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
+        contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
+        return contrast,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, contrast: torch.FloatTensor) -> torch.FloatTensor:
+        # contrast = contrast.view(-1, 1, 1, 1)
+        return K.adjust_saturation(batch, contrast)
+
+
+class Brightness(ColorAugmentation):
+    r"""Changes the brightness of the image.
+
+    .. image:: _static/example_images/Brightness.png
+   """
+    brightness = Uniform((-1.0, 1.0))
+
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
+        brightness = type(self).brightness(batch.size(0), device=batch.device).view(-1)
+        return brightness,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
+        return torch.clamp(batch + brightness.view([-1, 1, 1, 1]), 0., 1.)
+
+
+class Contrast(ColorAugmentation):
+    r"""Changes the contrast of the image.
+
+    .. image:: _static/example_images/Contrast.png
+   """
+    contrast = Uniform((0.0, 2.0))
+
+    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
+        contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
+        return contrast,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, contrast: torch.FloatTensor) -> torch.FloatTensor:
+        # contrast = contrast.view(-1, 1, 1, 1)
+        return torch.clamp(batch*contrast.view([-1, 1, 1, 1]), 0.0, 1.0)
+
 
 
 class Saturation(ColorAugmentation):
@@ -78,23 +166,6 @@ class Saturation(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, saturation: torch.FloatTensor) -> torch.FloatTensor:
         return K.adjust_saturation(batch, saturation)
-
-
-class Contrast(ColorAugmentation):
-    r"""Changes the contrast of the image.
-
-    .. image:: _static/example_images/Contrast.png
-   """
-    contrast = Uniform((0.0, 1.0))
-
-    def generate_batch_state(self, batch: torch.FloatTensor) -> AugmentationState:
-        contrast = type(self).contrast(batch.size(0), device=batch.device).view(-1)
-        return contrast,
-
-    @classmethod
-    def functional_image(cls, batch: torch.FloatTensor, contrast: torch.FloatTensor) -> torch.FloatTensor:
-        # contrast = contrast.view(-1, 1, 1, 1)
-        return K.adjust_saturation(batch, contrast)
 
 
 class Hue(ColorAugmentation):
@@ -139,6 +210,23 @@ class ColorJitter(ColorAugmentation):
         batch = K.adjust_brightness(batch, brightness)
         batch = K.adjust_contrast(batch, contrast)
         return batch
+
+
+class GaussianAdditiveNoise(ColorAugmentation):
+    r"""Lowers   the brightness of the image over a random mask.
+
+    .. image:: _static/example_images/PlasmaShadow.png
+   """
+    noise = Normal(mean=0, deviation=.2)
+
+    def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        tensor_sz = batch_tensor.size()
+        noise = type(self).noise(tensor_sz, device=batch_tensor.device)
+        return noise,
+
+    @classmethod
+    def functional_image(cls, batch: torch.FloatTensor, noise: torch.FloatTensor) -> torch.FloatTensor:
+        return torch.clamp(batch + noise, 0, 1)
 
 
 class PlasmaBrightness(ColorAugmentation):
@@ -281,17 +369,22 @@ class PlasmaShadow(ColorAugmentation):
         return torch.clamp(batch + shade_map, 0, 1)
 
 
-class GaussianAdditiveNoise(ColorAugmentation):
+class PlasmaGaussianAdditiveNoise(ColorAugmentation):
     r"""Lowers   the brightness of the image over a random mask.
 
     .. image:: _static/example_images/PlasmaShadow.png
    """
     noise = Normal(mean=0, deviation=.2)
+    roughness = Uniform(value_range=(.3, .7))
 
     def generate_batch_state(self, batch_tensor: torch.FloatTensor) -> torch.FloatTensor:
+        batch_sz, channels, height, width = batch_tensor.size()
+        roughness = type(self).roughness(batch_sz, device=batch_tensor.device)
         tensor_sz = batch_tensor.size()
         noise = type(self).noise(tensor_sz, device=batch_tensor.device)
-        return noise,
+        plasma_sz = (batch_sz, 1, height, width)
+        noise_intencity_coefficient = functional_diamond_square(plasma_sz, roughness=roughness, device=batch_tensor.device)
+        return noise * noise_intencity_coefficient,
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, noise: torch.FloatTensor) -> torch.FloatTensor:

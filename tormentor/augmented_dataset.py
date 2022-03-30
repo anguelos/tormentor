@@ -5,7 +5,7 @@ import torch
 from matplotlib import pyplot as plt
 from torch import Tensor, FloatTensor, LongTensor
 
-from .base_augmentation import DeterministicImageAugmentation
+from .deterministic_image_augmentation import DeterministicImageAugmentation
 from .factory import AugmentationFactory
 
 t_tensor = torch.Tensor

@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+
+import fargv
+import dibco
+from dibco import warn
+import glob
+import sys
+import tormentor
+import torch
+from torch import nn, autograd, optim
+from torch.utils.data import DataLoader
+import iunets
+import time
+import tqdm
+import torch.nn.functional as F
+import numpy as np
+from PIL import Image
+import pathlib
+import tormentor
+from tormentor import *
+from bunet import BUNet
+from skimage.filters import threshold_otsu
+
+def binarization_fscores(retrieved, relevant, epsilon=.0000000001):
+    """Measures binarization FScores for one or more samples
+
+    Args:
+        retrieved (torch.tensor): The predictions tensor where 0 is the background and 1 is the foreground. The tensor represent a batch sized either [BxHxW] or [Bx1xHxW].
+        relevant (torch.tensor): The ground-truth tensor where 0 is the background and 1 is the foreground. The tensor represent a batch sized either [BxHxW] or [Bx1xHxW].
+        epsilon (float, optional): A value added to the nominator and the denominator to deal with numerical instabillity. Defaults to .0000000001.
+
+    Returns:
+        (torch.Tensor, torch.Tensor, torch.Tensor): A tuple of 1D torch tensors with the fscore, precision and recall of each sample.
+    """
+    assert retrieved.size() == relevant.size()
+    assert (len(retrieved.size()) == 3) or ((len(retrieved.size()) == 4))
+    if retrieved.size(1) == 2:
+        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]
+    if relevant.size(1) == 2:
+        relevant = relevant[:, 0, :, :] > relevant[:, 1, :, :]
+    retrieved = ~retrieved
+    relevant = ~relevant
+    batch_sz = retrieved.size(0)
+    retrieved = retrieved.view([batch_sz, -1])
+    relevant = relevant.view([batch_sz, -1])
+    true_positives = (retrieved * relevant)
+    precisions = ((true_positives.sum(dim=1).float()+epsilon)/(retrieved.sum(dim=1).float()+epsilon))
+    recalls = ((true_positives.sum(dim=1).float()+epsilon)/(relevant.sum(dim=1).float()+epsilon))
+    fscores = (2*precisions*recalls+epsilon)/(precisions+recalls+epsilon)
+    return fscores, precisions, recalls
+
+
+def train_epoch(net, dataloader, loss_fn, optimizer):
+    net.train(True)
+    device = next(net.parameters()).device
+    epoch_losses = []
+    epoch_fscores = []
+    t=time.time()
+    if len(net.train_epochs)>0:
+        desc=f"Training {len(net.train_epochs):5d} loss: {net.train_epochs[-1]['loss']:.6f} FM: {net.train_epochs[-1]['fscore']:.6f}"
+    else:
+        desc = 'NA'
+    for inputs, targets in tqdm.tqdm(dataloader, desc=desc):
+        inputs, targets = inputs.to(device), targets.to(device)
+        outputs = net(inputs)
+        loss = loss_fn(outputs, targets)
+        epoch_losses.append(loss.detach())
+        loss.sum().backward()
+        epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
+        optimizer.step()
+        optimizer.zero_grad()
+    total_time = time.time() - t
+    epoch_fscore = float(torch.cat(epoch_fscores, dim=0).mean())
+    epoch_loss = float(torch.stack(epoch_losses).mean())
+    net.train_epochs.append({"loss":epoch_loss, "fscore":epoch_fscore, "duration":total_time,"time":time.time()})
+
+
+def validate_epoch(net, dataloader, loss_fn, store_in_net=True):
+    with torch.no_grad():
+        net.train(False)
+        device = next(net.parameters()).device
+        epoch_losses = []
+        epoch_fscores = []
+        t=time.time()
+        if len(net.train_epochs)>0:
+            desc=f"Train loss: {net.train_epochs[-1]['loss']:.6f} FM: {net.train_epochs[-1]['fscore']:.6f}"
+        else:
+            desc = 'NA'
+        for inputs, targets in tqdm.tqdm(dataloader, desc=desc):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+            loss = loss_fn(outputs, targets)
+            epoch_losses.append(loss.detach())
+            epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
+        total_time = time.time() - t
+        epoch_fscore = float(torch.cat(epoch_fscores, dim=0).mean())
+        epoch_loss = float(torch.stack(epoch_losses).mean())
+        warn(f"Validation {len(net.train_epochs):5d} loss: {epoch_loss:.6f} FM: {epoch_fscore:.6f}")
+        if store_in_net:
+            net.validation_epochs[len(net.train_epochs)] = {"loss":epoch_loss, "fscore":epoch_fscore, "duration":total_time,"time":time.time()}
+        return epoch_fscore, epoch_fscore
+
+
+def validate_otsu(dataloader):
+    with torch.no_grad():
+        otsu_fscores = []
+        oracle_fscores = []
+        t=time.time()
+        for inputs, targets in tqdm.tqdm(dataloader, desc="Otsu"):
+            inputs, targets = inputs.cpu(), targets.cpu()
+            otsu_thr = threshold_otsu((inputs*255.).numpy().astype("uint8")[0,0, :, :]) / 255.
+            oracle_fscores.append(max([binarization_fscores(inputs>thr, targets.detach()[:,1:,:,:]<.5)[0] for thr in np.linspace(0,1, 255).tolist()]))
+            otsu_fscores.append(binarization_fscores(inputs>otsu_thr, targets.detach()[:,1:,:,:]<.5)[0])
+        otsu_fscore = float(torch.cat(otsu_fscores, dim=0).mean())
+        oracle_fscore = float(torch.stack(oracle_fscores).mean())
+        #print(f"Validation Otsu FM:{otsu_fscore:.6f} Oracle FM: {oracle_fscore:.6f}")
+        return otsu_fscore, oracle_fscore
+
+
+def save_images_infolder(image_list, folder):
+    pathlib.Path(folder).mkdir(parents=True, exist_ok=True)
+    for n, image in enumerate(image_list):
+        if isinstance(image, Image.Image):
+            filename = str(pathlib.Path(folder).joinpath(f"{n:05d}.png"))
+            image.save(filename)
+        elif isinstance(image, tuple):
+            images = image
+            for partition, image in enumerate(images):
+                filename = str(pathlib.Path(folder).joinpath(f"{n:05d}_{partition:02d}.png"))
+                image.save(filename)
+
+
+
+def load_dataset(dataset_name:str):
+    if dataset_name == "synth":
+        images = [torch.Tensor(np.array(Image.open(fname))[:,:,0]/255.).unsqueeze(dim=0) for fname in glob.glob("tmp/synth_pages//*png")]
+        return [(img, torch.cat([(img>0.99607843).float(), (~(img>0.99607843)).float()])) for img in images]
+    if dataset_name == "dibco2009":
+        return dibco.Dibco.Dibco2009()
+    elif dataset_name == "dibco2010":
+        return dibco.Dibco.Dibco2010()
+    elif dataset_name == "dibco2011":
+        return dibco.Dibco.Dibco2011()
+    elif dataset_name == "dibco2012":
+        return dibco.Dibco.Dibco2012()
+    elif dataset_name == "dibco2013":
+        return dibco.Dibco.Dibco2013()
+    elif dataset_name == "dibco2014":
+        return dibco.Dibco.Dibco2014()
+    elif dataset_name == "dibco2016":
+        return dibco.Dibco.Dibco2016()
+    elif dataset_name == "dibco2017":
+        return dibco.Dibco.Dibco2017()
+    elif dataset_name == "dibco2018":
+        return dibco.Dibco.Dibco2018()
+    elif dataset_name == "dibco2019":
+        return dibco.Dibco.Dibco2019()
+    elif dataset_name == "<dibco2018":
+        return dibco.Dibco.Dibco2017()+dibco.Dibco.Dibco2016()+dibco.Dibco.Dibco2013()+dibco.Dibco.Dibco2012()+dibco.Dibco.Dibco2011()+dibco.Dibco.Dibco2010()+dibco.Dibco.Dibco2009()
+    elif dataset_name == ">dibco2010":
+        return dibco.Dibco.Dibco2018()+dibco.Dibco.Dibco2017()+dibco.Dibco.Dibco2016()+dibco.Dibco.Dibco2013()+dibco.Dibco.Dibco2012()+dibco.Dibco.Dibco2011()+dibco.Dibco.Dibco2010()+dibco.Dibco.Dibco2009()
+    else:
+        raise ValueError
+
+
+
+if __name__=="__main__":
+    params = {
+        "lr_decay_gamma":.995,
+        "mode": "train",
+        "arch_size": "small",
+        "trainset": "dibco2009",
+        "validationset": "dibco2010",
+        "testset": "dibco2011",
+        "resume_fname": "bunet_{arch_size}.pt",
+        "bestfound_fname": "{resume_fname}.best_so_far.pt",
+        "lr":.01,
+        "epochs":100,
+        "batch_sz":1,
+        "input_channels":1,
+        "target_channels":2,
+        "save_freq":5,
+        "validation_freq":5,
+        "validation_dump_freq":0,
+        "validation_folder":"/tmp/validation_images",
+        "train_dump_freq":0,
+        "train_folder":"/tmp/train_images",
+        "device":"cuda",
+        "augmentation_str": "tormentor.RandomPlasmaShadow  ^ tormentor.RandomPlasmaContrast  ^ tormentor.RandomIdentity ^ tormentor.RandomFlip ^ tormentor.RandomBrightness ^ tormentor.RandomWrap ^ tormentor.RandomShred"
+    }
+    
+    args, _ = fargv.fargv(params)
+    validationset = load_dataset(args.validationset)
+    valloader = DataLoader(validationset, batch_size=args.batch_sz)
+
+    if args.mode in ["train", "test"]: # a model is loaded for training or testing
+        if args.arch_size == "small":
+            channels, stack_size = (64, 128, 256, 384), 2
+        elif args.arch_size == "deep":
+            channels, stack_size = (64, 128, 256, 384), 4
+        elif args.arch_size == "wide":
+            channels, stack_size = (64, 128, 256, 512, 1024), 2
+        elif args.arch_size == "medium":
+            channels, stack_size = (64, 128, 256, 512), 3
+        elif args.arch_size == "large":
+            channels, stack_size = (64, 128, 256, 512, 1024), 4
+        else:
+            print(args.arch_size)
+            raise ValueError
+
+        net = BUNet.resume(args.resume_fname, input_channels=args.input_channels, target_channels=args.target_channels, device=args.device, channels=channels, stack_size=stack_size)
+        net.args_history[len(net.train_epochs)] = args
+
+
+    if args.mode == "train":
+        trainset = load_dataset(args.trainset)
+        trainloader = DataLoader(trainset, batch_size=args.batch_sz)
+        if args.augmentation_str == '':
+            args.augmentation_str = "Identity"
+        if args.augmentation_str == 'flat_plasma':
+            args.augmentation_str = "(RandomPlasmaBrightness ^ RandomIdentity ^ RandomPlasmaLinearColor ^ RandomPlasmaContrast ^ RandomPlasmaGaussianAdditiveNoise ^ RandomPlasmaShadow ^ RandomWrap ^ RandomShredInside ^ RandomShredOutside ^ RandomShred)"
+        if args.augmentation_str == 'routing_plasma':
+            args.augmentation_str = "((RandomIdentity.custom() ^ RandomIdentity.custom() ^ RandomPlasmaLinearColor.custom(roughness=Uniform(value_range=(0.1, 0.4)), alpha_range=Uniform(value_range=(0.0, 1.0)), alpha_mean=Uniform(value_range=(0.0, 1.0)), beta_range=Uniform(value_range=(0.0, 1.0)), beta_mean=Uniform(value_range=(0.0, 1.0)))) | (RandomIdentity.custom() ^ RandomIdentity.custom() ^ RandomShredInside.custom(roughness=Uniform(value_range=(0.4, 0.8)), erase_percentile=Uniform(value_range=(0.0, 0.2))) ^ RandomShredOutside.custom(roughness=Uniform(value_range=(0.1, 0.7)), erase_percentile=Uniform(value_range=(0.0, 0.5)))) | RandomLinearColor.custom(a=Uniform(value_range=(0.6, 0.668)), b=Uniform(value_range=(0.0, 1.0))) | (RandomIdentity.custom() ^ RandomPlasmaShadow.custom(roughness=Uniform(value_range=(0.1, 0.7)), shade_intensity=Uniform(value_range=(-0.51, 0.0)), shade_quantity=Uniform(value_range=(0.0, 1.0)))) | RandomPlasmaBrightness.custom(roughness=Uniform(value_range=(0.1, 0.7)), intensity=Uniform(value_range=(0.0, 0.27))) | (RandomIdentity.custom() ^ RandomPerspective.custom(x_offset=Uniform(value_range=(0.75, 1.5)), y_offset=Uniform(value_range=(0.75, 1.5))) ^ RandomWrap.custom(roughness=Uniform(value_range=(0.1, 0.7)), intensity=Uniform(value_range=(0.0, 1.0))) ^ RandomWrap.custom(roughness=Uniform(value_range=(0.1, 0.7)), intensity=Uniform(value_range=(0.0, 1.0)))))"
+        if args.augmentation_str == 'simple_aug':
+            args.augmentation_str = 'RandomFlip ^ RandomRotate ^ RandomBrightness ^ Invert ^ Saturation ^ Identity'
+        augmentations = eval(args.augmentation_str)
+        if args.augmentation_str != '':
+            trainloader = tormentor.AugmentedDataLoader(trainloader, augmentations, computation_device=args.device)
+
+
+        optimizer = optim.Adam(params=net.parameters(), lr=args.lr)
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.lr_decay_gamma)
+        loss_fn = nn.BCEWithLogitsLoss()
+        if len(net.train_epochs) == 0:
+            validate_epoch(net, valloader, loss_fn)
+        if args.mode == "train":
+            for epoch in range(len(net.train_epochs), args.epochs):
+                train_epoch(net, trainloader, loss_fn, optimizer)
+                net.train_epochs[-1]["lr"] = lr_scheduler.get_lr()
+                lr_scheduler.step()
+                if epoch % args.validation_freq == 0 or epoch == args.epochs -1:
+                    current_fscore = validate_epoch(net, valloader, loss_fn)[0]
+                    old_validations = [net.validation_epochs[k]["fscore"] for k in sorted(net.validation_epochs.keys())[:-1]] +[0.]
+                    if current_fscore > max(old_validations):
+                        net.save(args.bestfound_fname)
+
+                if args.validation_dump_freq > 0 and epoch % args.validation_dump_freq == 0 or epoch == args.epochs -1:
+                    images = net.binarize(valloader)
+                    save_images_infolder(images, args.validation_folder)
+                if args.train_dump_freq > 0 and epoch % args.train_dump_freq == 0 or epoch == args.epochs -1:
+                    images = net.binarize(trainloader)
+                    save_images_infolder(images, args.train_folder)
+
+                if epoch % args.save_freq == 0 or epoch == args.epochs -1:
+                    net.save(args.resume_fname)
+    elif args.mode == "test":
+        loss_fn = nn.BCEWithLogitsLoss()
+        fscore = validate_epoch(net, valloader, loss_fn)[0]
+        print(f"{args.resume_fname}, {args.validationset}: FS:{100*fscore:6.3f} %")
+    elif args.mode == "otsu_eval":
+        otsu_fscore, oracle_fscore = validate_otsu(valloader)
+        print(f"Otsu, {args.validationset}: FS:{100*otsu_fscore:6.3f} %")
+        print(f"Oracle, {args.validationset}: FS:{100*oracle_fscore:6.3f} %")
+

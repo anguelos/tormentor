@@ -1,7 +1,9 @@
 import kornia as K
 import torch
 
-from .base_augmentation import SpatialImageAugmentation, SamplingField, AugmentationState
+from .deterministic_image_augmentation import AugmentationState
+from .sampling_fileds import SamplingField
+from .spatial_image_augmentation import SpatialImageAugmentation
 from .random import Uniform, Bernoulli
 
 
@@ -171,7 +173,7 @@ class ScaleTranslate(SpatialImageAugmentation):
         y_scales = y_scales.unsqueeze(dim=1).unsqueeze(dim=2)
         return x_offset + x_scales * sampling_field[0], y_offset + y_scales * sampling_field[1]
 
-
+# Replaced tFlip with a choice of flip vertical, flip horizontal, ,
 class Flip(SpatialImageAugmentation):
     r"""Implementation of augmentation by flipping the X or Y axis.
 
@@ -193,6 +195,34 @@ class Flip(SpatialImageAugmentation):
         horizontal = ((1 - horizontal) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
         vertical = ((1 - vertical) * 2 - 1).unsqueeze(dim=1).unsqueeze(dim=1)
         return horizontal * sampling_field[0], vertical * sampling_field[1]
+
+
+class FlipHorizontal(SpatialImageAugmentation):
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
+        return ()
+
+    @classmethod
+    def functional_sampling_field(cls, sampling_field: SamplingField):
+        return -1 * sampling_field[0], sampling_field[1]
+
+
+class FlipVertical(SpatialImageAugmentation):
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
+        return ()
+
+    @classmethod
+    def functional_sampling_field(cls, sampling_field: SamplingField):
+        return sampling_field[0], -1 * sampling_field[1]
+
+
+class Transpose(SpatialImageAugmentation):
+    def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
+        return ()
+
+    @classmethod
+    def functional_sampling_field(cls, sampling_field: SamplingField):
+        return -1 * sampling_field[0], -1 * sampling_field[1]
+
 
 
 class RemoveRectangle(SpatialImageAugmentation):
