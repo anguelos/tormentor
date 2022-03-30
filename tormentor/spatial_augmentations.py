@@ -208,10 +208,10 @@ class FlipHorizontal(SpatialImageAugmentation):
 
 class FlipVertical(SpatialImageAugmentation):
     def generate_batch_state(self, sampling_tensors: SamplingField) -> torch.FloatTensor:
-        return ()
+        return (None,)
 
     @classmethod
-    def functional_sampling_field(cls, sampling_field: SamplingField):
+    def functional_sampling_field(cls, sampling_field: SamplingField, _):
         return sampling_field[0], -1 * sampling_field[1]
 
 
