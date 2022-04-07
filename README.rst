@@ -65,12 +65,12 @@ Augment batch:
     python import torch, tormentor
     img = torch.rand(7,3, 119,137)
     mask = torch.ones([7,1, 119,137])
-    pcl = [(torch.rand(9), torch.rand(9)) for \_ in range(7)]
+    pcl = [(torch.rand(9), torch.rand(9)) for _ in range(7)]
     aug = tormentor.Rotate()
     new_pcl, new_img = aug(pcl, img) # augment pointcloud and respective image
-    aug(pcl, img, compute\_img=False) # augment only pointcloud, img passed for dimensions
-    aug(pcl, torch.empty([7, 1, 320, 240]), compute\_img=False) # augment only pointcloud, tensor passed for dimensions
-    aug(mask, is\_mask=True) # augment mask
+    aug(pcl, img, compute_img=False) # augment only pointcloud, img passed for dimensions
+    aug(pcl, torch.empty([7, 1, 320, 240]), compute_img=False) # augment only pointcloud, tensor passed for dimensions
+    aug(mask, is_mask=True) # augment mask
 
 
 Augment MSCoco compliant Dataset:
