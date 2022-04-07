@@ -99,7 +99,7 @@ class KorniaBrightness(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
-        return K.adjust_brightness(batch, brightness)
+        return K.enhance.adjust_brightness(batch, brightness)
 
 class KorniaContrast(ColorAugmentation):
     r"""Changes the contrast of the image.
@@ -115,7 +115,7 @@ class KorniaContrast(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, contrast: torch.FloatTensor) -> torch.FloatTensor:
         # contrast = contrast.view(-1, 1, 1, 1)
-        return K.adjust_saturation(batch, contrast)
+        return K.enhance.adjust_saturation(batch, contrast)
 
 
 class Brightness(ColorAugmentation):
@@ -165,7 +165,7 @@ class Saturation(ColorAugmentation):
 
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, saturation: torch.FloatTensor) -> torch.FloatTensor:
-        return K.adjust_saturation(batch, saturation)
+        return K.enhance.adjust_saturation(batch, saturation)
 
 
 class Hue(ColorAugmentation):
@@ -182,7 +182,7 @@ class Hue(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, hue: torch.FloatTensor) -> torch.FloatTensor:
         # hue = hue.view(-1, 1, 1, 1)
-        return K.adjust_hue(batch, hue)
+        return K.enhance.adjust_hue(batch, hue)
 
 
 class ColorJitter(ColorAugmentation):
@@ -205,10 +205,10 @@ class ColorJitter(ColorAugmentation):
     @classmethod
     def functional_image(cls, batch: torch.FloatTensor, hue: torch.FloatTensor, contrast: torch.FloatTensor,
                          saturation: torch.FloatTensor, brightness: torch.FloatTensor) -> torch.FloatTensor:
-        batch = K.adjust_hue(batch, hue)
-        batch = K.adjust_saturation(batch, saturation)
-        batch = K.adjust_brightness(batch, brightness)
-        batch = K.adjust_contrast(batch, contrast)
+        batch = K.enhance.adjust_hue(batch, hue)
+        batch = K.enhance.adjust_saturation(batch, saturation)
+        batch = K.enhance.adjust_brightness(batch, brightness)
+        batch = K.enhance.adjust_contrast(batch, contrast)
         return batch
 
 

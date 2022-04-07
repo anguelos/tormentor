@@ -22,6 +22,8 @@ lines = open(p.corpus).readlines()
 lines = [l for l in lines if len(l.strip())>0 and not l.strip().startswith("#")]
 words = " ".join(lines).split()
 fonts = glob.glob(f"{p.fontdir}/**/*ttf")
+fonts = [str(p) for p in pathlib.Path(p.fontdir).rglob("**/*ttf")]
+print(fonts)
 
 def random_paragraph_text():
     start = random.randint(0, len(words)-10000)
