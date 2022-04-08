@@ -102,5 +102,5 @@ intersphinx_mapping = {
 
 
 # ugly hack to generate image samples inside read the docs
-import os
-os.system("cd docs; make all_images")
+#import os
+#os.system("cd docs; make all_images")
