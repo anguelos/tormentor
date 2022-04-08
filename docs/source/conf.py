@@ -100,3 +100,7 @@ intersphinx_mapping = {
     'torch': ('http://pytorch.org/docs/stable/', None),
 }
 
+
+# ugly hack to generate image samples inside read the docs
+import os
+os.system("cd docs; make all_images")
