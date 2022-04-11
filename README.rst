@@ -213,4 +213,17 @@ Internal Conventions
 -  Spatial augmentation samplingfields are normalised to -1, 1 so their
    effect magnitude is proporsional to image size (They are top down).
 
+Cite
+====
+Bibtex::
+    @misc{tormentor,
+        doi = {10.48550/ARXIV.2204.03776},
+        url = {https://arxiv.org/abs/2204.03776},
+        author = {Nicolaou, Anguelos and Christlein, Vincent and Riba, Edgar and Shi, Jian and Vogeler, Georg and Seuret, Mathias},
+        keywords = {Computer Vision and Pattern Recognition (cs.CV), Artificial Intelligence (cs.AI), FOS: Computer and information sciences, FOS: Computer and information sciences},
+        title = {TorMentor: Deterministic dynamic-path, data augmentations with fractals},
+        publisher = {arXiv},
+        year = {2022},
+        copyright = {Creative Commons Attribution 4.0 International}
+    }
 

@@ -1,18 +1,9 @@
-Text Segmentation
-
-Pixel classification into text not text 
-
-Scene-text segmentation:
-For the dataset download the following
-* [Trainset inputs](https://rrc.cvc.uab.es/?com=downloads&action=download&ch=2&f=aHR0cHM6Ly9ycmMuY3ZjLnVhYi5lcy9kb3dubG9hZHMvQ2hhbGxlbmdlMl9UcmFpbmluZ19UYXNrMTJfSW1hZ2VzLnppcA==)
-* [Trainset groundtruth](https://rrc.cvc.uab.es/?com=downloads&action=download&ch=2&f=aHR0cHM6Ly9ycmMuY3ZjLnVhYi5lcy9kb3dubG9hZHMvQ2hhbGxlbmdlMl9UcmFpbmluZ19UYXNrMl9HVC56aXA=)
-* [Testset inputs](https://rrc.cvc.uab.es/?com=downloads&action=download&ch=2&f=aHR0cHM6Ly9ycmMuY3ZjLnVhYi5lcy9kb3dubG9hZHMvQ2hhbGxlbmdlMl9UZXN0X1Rhc2sxMl9JbWFnZXMuemlw)
-* [Testset groundtruth](https://rrc.cvc.uab.es/?com=downloads&action=download&ch=2&f=aHR0cHM6Ly9ycmMuY3ZjLnVhYi5lcy9kb3dubG9hZHMvQ2hhbGxlbmdlMl9UZXN0X1Rhc2syX0dULnppcA==)
-
-Registration is required
-
-
-
+Download DIBCO mirror if some of the dibco URLs are down
 ```bash
-PYTHONPATH="./" nice -n 20  python3 ./examples/text_segmentation/inference.py -inputs ~/data/rr/focused_segmentation/tmp/img_*.jpg -flip=False -device=cpu
+python3 -m pip install git+https://github.com/moeb/rpack
+pip3 install --user gdown
+FILEID=19K7bw1x8CVhn--ks4BRvQPqJe8zPDI93
+FILENAME=all_dibco_data.tar.bz2
+#gdown https://drive.google.com/uc?id="${FILEID}"
+(mkdir -p tmp;cd tmp;gdown https://drive.google.com/uc?id="${FILEID}";tar -xpvjf "../${FILENAME}")
 ```
