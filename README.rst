@@ -215,7 +215,9 @@ Internal Conventions
 
 Cite
 ====
-Bibtex::
+
+.. code-block:: python
+
     @misc{tormentor,
         doi = {10.48550/ARXIV.2204.03776},
         url = {https://arxiv.org/abs/2204.03776},
@@ -227,3 +229,5 @@ Bibtex::
         copyright = {Creative Commons Attribution 4.0 International}
     }
 
+
+Accepted at ECV 2022
