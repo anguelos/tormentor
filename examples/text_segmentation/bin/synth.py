@@ -10,10 +10,10 @@ import pathlib
 
 
 p = {
-    "corpus":"./data/brown.txt",
-    "outdir":"./tmp/synth",
-    "fontdir":"./data/fonts",
-    "npages":1000
+    "corpus": "./data/brown.txt",
+    "outdir": "./tmp/synth",
+    "fontdir": "./data/fonts",
+    "npages": 1000
 }
 
 p, _ = fargv.fargv(p)
