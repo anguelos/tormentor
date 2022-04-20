@@ -181,7 +181,7 @@ Design Principles
 -  Every instance of every augmentation class is deterministic.
 -  Inputs and Outputs are pytorch tensors and pytorch is prefered for
    all computation.
--  All data are by default 4D: [batch x channel x width x height].
+-  Augmentations are internally defined for batches. All batch data are by default 4D: [batch x channel x height x width].
 -  Single sample augmentation: batch-size must always be 1.
 -  Threadsafety: Every augmentation instance must be threadsafe.
 -  Input/Output is restricted to one or more channels of 2D images.
