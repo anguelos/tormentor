@@ -74,7 +74,7 @@ class BUNet(nn.Module):
                 output = (F.softmax(output, dim=1)[0, 1, :,:])
                 
                 if threshold:
-                    output = (output > .5).astype("float")
+                    output = (output > .5).float("float")
                 
                 if to_pil:
                     return tensor2pil(output)
