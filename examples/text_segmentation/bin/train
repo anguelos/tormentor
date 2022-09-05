@@ -21,6 +21,20 @@ from tormentor import *
 from bunet import BUNet
 from skimage.filters import threshold_otsu
 
+
+def inference(net, input_image_paths, output_extention=".bin.png", threshold=True, transform=dibco.dibco_transform_gray_input):
+    assert output_extention != ""
+    net.train(False)
+    device = next(net.parameters()).device
+    t=time.time()
+    for img_name in tqdm.tqdm(input_image_paths):
+        input_image = Image.open(img_name)
+        with torch.no_grad():
+            input_sample = transform(input_image).to(device)
+            output_sample = net.binarize(input_sample, to_pil=True, threshold=threshold)
+            output_sample.save(f"{img_name}{output_extention}")
+
+
 def binarization_fscores(retrieved, relevant, epsilon=.0000000001):
     """Measures binarization FScores for one or more samples
 
@@ -166,6 +180,9 @@ def load_dataset(dataset_name:str):
 
 if __name__=="__main__":
     params = {
+        "inputs": set([]),
+        "threshold_outputs": True,
+        "output_extention": ".bin.png",
         "lr_decay_gamma":.995,
         "mode": "train",
         "arch_size": "small",
@@ -190,10 +207,8 @@ if __name__=="__main__":
     }
     
     args, _ = fargv.fargv(params)
-    validationset = load_dataset(args.validationset)
-    valloader = DataLoader(validationset, batch_size=args.batch_sz)
 
-    if args.mode in ["train", "test"]: # a model is loaded for training or testing
+    if args.mode in ["train", "test", "inference"]: # a model is loaded for training or testing
         if args.arch_size == "small":
             channels, stack_size = (64, 128, 256, 384), 2
         elif args.arch_size == "deep":
@@ -211,6 +226,18 @@ if __name__=="__main__":
         net = BUNet.resume(args.resume_fname, input_channels=args.input_channels, target_channels=args.target_channels, device=args.device, channels=channels, stack_size=stack_size)
         net.args_history[len(net.train_epochs)] = args
 
+    if args.mode == "inference":
+        print("Inference")
+        inference(net, input_image_paths=args.inputs, output_extention=args.output_extention, threshold=args.threshold_outputs, transform=dibco.dibco_transform_gray_input)
+        sys.exit(0)
+    else:
+        print("No Inference", args.mode)
+
+
+    validationset = load_dataset(args.validationset)
+    valloader = DataLoader(validationset, batch_size=args.batch_sz)
+
+
 
     if args.mode == "train":
         trainset = load_dataset(args.trainset)
@@ -226,8 +253,6 @@ if __name__=="__main__":
         augmentations = eval(args.augmentation_str)
         if args.augmentation_str != '':
             trainloader = tormentor.AugmentedDataLoader(trainloader, augmentations, computation_device=args.device)
-
-
         optimizer = optim.Adam(params=net.parameters(), lr=args.lr)
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.lr_decay_gamma)
         loss_fn = nn.BCEWithLogitsLoss()
@@ -261,4 +286,3 @@ if __name__=="__main__":
         otsu_fscore, oracle_fscore = validate_otsu(valloader)
         print(f"Otsu, {args.validationset}: FS:{100*otsu_fscore:6.3f} %")
         print(f"Oracle, {args.validationset}: FS:{100*oracle_fscore:6.3f} %")
-

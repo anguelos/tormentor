@@ -63,7 +63,7 @@ class BUNet(nn.Module):
         return x
     
 
-    def binarize(self, input):
+    def binarize(self, input, to_pil=False, threshold=False):
         if isinstance(input, torch.Tensor):
             with torch.no_grad():
                 if len(input.size()) == 3:
@@ -72,15 +72,14 @@ class BUNet(nn.Module):
                 input = input.to(next(self.parameters()).device)
                 output = self.forward(input)
                 output = (F.softmax(output, dim=1)[0, 1, :,:])
-                return output
-                #output = (output > .5).astype("float")
-                output_img = Image.fromarray(np.uint8(output*255))
-                if input.size(1) == 1:
-                    input_array = np.uint8(input[0, 0,:,:].cpu().numpy().astype("float") * 255)
+                
+                if threshold:
+                    output = (output > .5).astype("float")
+                
+                if to_pil:
+                    return tensor2pil(output)
                 else:
-                    input_array = np.uint8(input[0, :,:,:].cpu().numpy().astype("float") * 255)
-                input_img = Image.fromarray(input_array)
-                return output_img
+                    return output
         elif isinstance(input, DataLoader):
             results = []
             for sample_data in input:
