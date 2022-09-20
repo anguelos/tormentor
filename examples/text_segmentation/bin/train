@@ -27,7 +27,9 @@ def inference(net, input_image_paths, output_extention=".bin.png", threshold=Tru
     net.train(False)
     device = next(net.parameters()).device
     t=time.time()
-    for img_name in tqdm.tqdm(input_image_paths):
+    pbar = tqdm.tqdm(input_image_paths)
+    for img_name in pbar:
+        pbar.set_description(f"Img: {img_name}", refresh=True)
         input_image = Image.open(img_name)
         with torch.no_grad():
             input_sample = transform(input_image).to(device)
