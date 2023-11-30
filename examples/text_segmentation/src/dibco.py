@@ -52,8 +52,9 @@ def extract(archive,root=None):
 
 
 def check_os_dependencies():
-    program_list=["wget"]
+    program_list = ["wget"]
     return all([shell_stdout("which "+prog) for prog in program_list])
+
 
 def mkdir_p(path):
     try:
@@ -64,13 +65,14 @@ def mkdir_p(path):
         else:
             raise
 
-def resumable_download(url,save_dir):
+
+def resumable_download(url, save_dir):
     mkdir_p(save_dir)
     download_cmd = 'wget --directory-prefix=%s -c %s' % (save_dir, url)
     warn("Downloading {} ... ".format(url))
     shell_stdout(download_cmd)
     warn("done")
-    return os.path.join(save_dir,url.split("/")[-1])
+    return os.path.join(save_dir, url.split("/")[-1])
 
 
 dibco_transform_gray_input = torchvision.transforms.Compose([
@@ -79,10 +81,12 @@ dibco_transform_gray_input = torchvision.transforms.Compose([
     #lambda x: torch.cat([x, 1 - x])
 ])
 
+
 dibco_transform_color_input = torchvision.transforms.Compose([
     torchvision.transforms.ToTensor(),
     #torchvision.transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 ])
+
 
 dibco_transform_gt = torchvision.transforms.Compose([
     torchvision.transforms.Grayscale(),
@@ -130,16 +134,16 @@ class Dibco:
                  "https://vc.ee.duth.gr/dibco2017/benchmark/DIBCO2017_GT.7z"],
         "2018": ["http://vc.ee.duth.gr/h-dibco2018/benchmark/dibco2018_Dataset.zip",
                  "http://vc.ee.duth.gr/h-dibco2018/benchmark/dibco2018-GT.zip"],
-        "2019A":["https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_dataset_trackA.zip",
-                 "https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_gt_trackA.zip"],
-        "2019B":["https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_dataset_trackB.zip",
-                 "https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_GT_trackB.zip"]
+        "2019A": ["https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_dataset_trackA.zip",
+                  "https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_gt_trackA.zip"],
+        "2019B": ["https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_dataset_trackB.zip",
+                  "https://vc.ee.duth.gr/dibco2019/benchmark/dibco2019_GT_trackB.zip"]
     }
 
     urls = {
         "2009_HW": ["http://rr.visioner.ca/assets/dibco_mirror/DIBC02009_Test_images-handwritten.rar",
                     "http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009-GT-Test-images_handwritten.rar"],
-            "2009_P": ["http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009_Test_images-printed.rar",
+        "2009_P": ["http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009_Test_images-printed.rar",
                    "http://rr.visioner.ca/assets/dibco_mirror/DIBCO2009-GT-Test-images_printed.rar"],
         "2010": ["http://rr.visioner.ca/assets/dibco_mirror/H_DIBCO2010_test_images.rar",
                  "http://rr.visioner.ca/assets/dibco_mirror/H_DIBCO2010_GT.rar"],
@@ -161,7 +165,6 @@ class Dibco:
                  "http://rr.visioner.ca/assets/dibco_mirror/dibco2019_GT_trackB.zip"]
     }
 
-
     @staticmethod
     def load_single_stream(compressed_stream):
         input_name2bs = _get_dict(compressed_stream, filter_gt=True)
@@ -169,7 +172,7 @@ class Dibco:
         id2gt = {n.split("/")[-1].split("_")[0].split(".")[0]: Image.open(fd).copy() for n, fd in gt_name2bs.items()}
         id2in = {n.split("/")[-1].split("_")[0].split(".")[0]: Image.open(fd).copy() for n, fd in input_name2bs.items()}
         assert set(id2gt.keys()) == set(id2in.keys())
-        #id2gt = {k: ImageOps.invert(v.convert("RGB")).convert('1') for k, v in id2gt.items()}
+        #  id2gt = {k: ImageOps.invert(v.convert("RGB")).convert('1') for k, v in id2gt.items()}
         id2in = {k: v.convert("RGB") for k, v in id2in.items()}
         return {k: (id2in[k], id2gt[k]) for k in id2gt.keys()}
 
@@ -180,7 +183,7 @@ class Dibco:
         id2in = {n.split("/")[-1].split("_")[0].split(".")[0]: Image.open(fd).copy() for n, fd in input_name2bs.items()}
         id2gt = {n.split("/")[-1].split("_")[0].split(".")[0]: Image.open(fd).copy() for n, fd in gt_name2bs.items()}
         assert set(id2gt.keys()) == set(id2in.keys())
-        #id2gt = {k: ImageOps.invert(v.convert("RGB")).convert('1') for k, v in id2gt.items()}
+        #  id2gt = {k: ImageOps.invert(v.convert("RGB")).convert('1') for k, v in id2gt.items()}
         id2in = {k: v.convert("RGB") for k, v in id2in.items()}
         return {k: (id2in[k], id2gt[k]) for k in id2gt.keys()}
 
@@ -188,7 +191,6 @@ class Dibco:
     def Dibco2009(**kwargs):
         kwargs["partitions"] = ["2009_HW", "2009_P"]
         return Dibco(**kwargs)
-
 
     @staticmethod
     def Dibco2010(**kwargs):
@@ -247,7 +249,7 @@ class Dibco:
                 if not os.path.isfile(archive_fname):
                     resumable_download(url, root)
                 else:
-                    warn(archive_fname," found in cache.")
+                    warn(archive_fname, " found in cache.")
             if len(Dibco.urls[partition]) == 2:
                 if Dibco.urls[partition][0].endswith(".rar"):
                     input_rar = rarfile.RarFile(root + "/" + Dibco.urls[partition][0].split("/")[-1])
@@ -310,6 +312,7 @@ class Dibco:
         res.inputs = self.inputs + other.inputs
         res.gt = self.gt + other.gt
         return res
+
 
 all_dibco_keys = set(Dibco.urls.keys())
 #all_dibco = {k: Dibco(partitions=[k]) for k in all_dibco_keys}

@@ -21,12 +21,15 @@ class BUNet(nn.Module):
     @staticmethod
     def resume(fname, **kwargs):
         try:
-            if "device" in kwargs.keys():
-                device = kwargs["device"]
-            else:
-                device = ""
+            
             state_dict=torch.load(fname, map_location="cpu")
             constructor_params = state_dict["constructor_params"]
+            if "device" in kwargs.keys():
+                device = kwargs["device"]
+                constructor_params["device"] = device
+            else:
+                device = "cpu"
+                constructor_params["device"] = "cpu"
             del state_dict["constructor_params"]
             validation_epochs = state_dict["validation_epochs"]
             del state_dict["validation_epochs"]
@@ -72,7 +75,8 @@ class BUNet(nn.Module):
                 input = input.to(next(self.parameters()).device)
                 output = self.forward(input)
                 output = (F.softmax(output, dim=1)[0, 1, :,:])
-                
+                o = output.cpu().numpy()
+                print(o.min(),o.max(),o.mean(), o.std())
                 if threshold:
                     output = (output > .5).float()
                 
