@@ -22,6 +22,7 @@ from bunet import BUNet
 from skimage.filters import threshold_otsu
 import subprocess
 from seals_segmentation import SealDs
+from itertools import zip_shortest
 
 
 def inference(net, input_image_paths, output_extention=".bin.png", threshold=True, transform=dibco.dibco_transform_gray_input, output_whitebg=True, ignore_input_file_ext=True):
@@ -119,7 +120,7 @@ def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
         desc = f"Training {len(net.train_epochs):5d} loss: {net.train_epochs[-1]['loss']:.6f} FM: {net.train_epochs[-1]['fscore']:.6f}"
     else:
         desc = 'NA'
-    for inputs, targets, r_inputs, r_targets, r_masks in tqdm.tqdm(multi_genarator(dataloader, region_dataloader), desc=desc):
+    for inputs, targets, r_inputs, r_targets, r_masks in tqdm.tqdm(zip_shortest(dataloader, region_dataloader), desc=desc):
         inputs, targets = inputs.to(device), targets.to(device)
         r_inputs, r_targets, r_masks = r_inputs.to(device), r_targets.to(device), r_masks.to(device)
         outputs = net(inputs)
@@ -359,7 +360,7 @@ if __name__ == "__main__":
                 if args.validation_dump_freq > 0 and epoch % args.validation_dump_freq == 0 or epoch == args.epochs -1:
                     images = net.binarize(valloader)
                     save_images_infolder(images, args.validation_folder)
-                if args.train_dump_freq > 0 and epoch % args.train_dump_freq == 0 or epoch == args.epochs -1:
+                if args.train_dump_freq > 0 and epoch % argsepoch_fscores.train_dump_freq == 0 or epoch == args.epochs -1:
                     images = net.binarize(trainloader)
                     save_images_infolder(images, args.train_folder)
                 if epoch % args.save_freq == 0 or epoch == args.epochs -1:
