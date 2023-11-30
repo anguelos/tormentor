@@ -328,7 +328,7 @@ if __name__ == "__main__":
                     net.save(args.resume_fname)
 
     if args.mode == "train_region":
-        region_ds = SealDs(draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=["../../../ptlbp/data/1000CV/1000_CVCharters/*/*/*/*.seals.gt.json"], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco.dibco_transform_gray_input) 
+        region_ds = SealDs(draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=["../../../didipcv/misc/1000_CVCharters/*/*/*/*.seals.gt.json"], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco.dibco_transform_gray_input) 
         region_dataloader = DataLoader(region_ds, batch_size=args.batch_sz, shuffle=True)
         trainset = load_dataset(args.trainset)
         trainloader = DataLoader(trainset, batch_size=args.batch_sz)
