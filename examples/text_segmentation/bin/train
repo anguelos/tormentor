@@ -100,11 +100,13 @@ def train_epoch(net, dataloader, loss_fn, optimizer):
 
 
 def multi_genarator(dataloader, region_dataloader):
-    while True:
-        regions = iter(region_dataloader)
-        for inputs, targets in dataloader:
+    regions = iter(region_dataloader)
+    for inputs, targets in dataloader:
+        try:
             region_inputs, region_targets, region_masks = next(regions)
             yield inputs, targets, region_inputs, region_targets, region_masks
+        except StopIteration
+            pass
 
 
 def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
