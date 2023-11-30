@@ -100,16 +100,6 @@ def train_epoch(net, dataloader, loss_fn, optimizer):
     net.train_epochs.append({"loss":epoch_loss, "fscore":epoch_fscore, "duration":total_time,"time":time.time()})
 
 
-def multi_genarator(dataloader, region_dataloader):
-    regions = iter(region_dataloader)
-    for inputs, targets in dataloader:
-        try:
-            region_inputs, region_targets, region_masks = next(regions)
-            yield inputs, targets, region_inputs, region_targets, region_masks
-        except StopIteration
-            pass
-
-
 def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
     net.train(True)
     device = next(net.parameters()).device
