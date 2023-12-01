@@ -14,13 +14,13 @@ def random_multicrop_to(dst_wh, *tensors):
     src_h = tensors[0].size(1)
     dst_w, dst_h = dst_wh
 
-    if src_w < dst_w:
+    if src_w <= dst_w:
         left = 0 
         right = src_w
     else:
         left = torch.randint(0, src_w - dst_w, (1, 1)).item()
         right = left + dst_w
-    if src_h < dst_h:
+    if src_h <= dst_h:
         top = 0
         bottom = src_h
     else:
