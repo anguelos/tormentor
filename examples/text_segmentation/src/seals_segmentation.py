@@ -17,6 +17,14 @@ def random_multicrop_to(dst_wh, *tensors):
     top = torch.randint(0, src_h - dst_h, (1, 1)).item()
     right = left + dst_w
     bottom = top + dst_h
+
+    if src_w < dst_w:
+        left = 0 
+        right = src_w
+    if src_h < dst_h:
+        top = 0
+        bottom = src_h
+
     res = []
     for t in tensors:
         assert len(t.size()) == 3
