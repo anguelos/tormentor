@@ -22,7 +22,7 @@ def random_multicrop_to(dst_wh, *tensors):
         assert len(t.size()) == 3
         assert t.size(2) >= src_w
         assert t.size(1) >= src_h
-        res.append(t[:, :, top:bottom, left:right])
+        res.append(t[:, top:bottom, left:right])
     return res
 
 
