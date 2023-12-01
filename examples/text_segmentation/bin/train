@@ -130,6 +130,7 @@ def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
         loss.sum().backward()
         epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
 
+        
         r_outputs = net(r_inputs)
         loss = loss_fn(r_outputs * r_masks, r_targets * r_masks)
         loss.sum().backward()
@@ -329,7 +330,7 @@ if __name__ == "__main__":
                     net.save(args.resume_fname)
 
     if args.mode == "train_region":
-        region_ds = SealDs(draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=[args.region_glob], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco.dibco_transform_gray_input) 
+        region_ds = SealDs(draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=[args.region_glob], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco.dibco_transform_gray_input,desired_width=1024, desired_height=1024) 
         region_dataloader = DataLoader(region_ds, batch_size=args.batch_sz, shuffle=True)
         trainset = load_dataset(args.trainset)
         trainloader = DataLoader(trainset, batch_size=args.batch_sz)
@@ -362,7 +363,7 @@ if __name__ == "__main__":
                 if args.validation_dump_freq > 0 and epoch % args.validation_dump_freq == 0 or epoch == args.epochs -1:
                     images = net.binarize(valloader)
                     save_images_infolder(images, args.validation_folder)
-                if args.train_dump_freq > 0 and epoch % argsepoch_fscores.train_dump_freq == 0 or epoch == args.epochs -1:
+                if args.train_dump_freq > 0 and epoch % args.train_dump_freq == 0 or epoch == args.epochs -1:
                     images = net.binarize(trainloader)
                     save_images_infolder(images, args.train_folder)
                 if epoch % args.save_freq == 0 or epoch == args.epochs -1:

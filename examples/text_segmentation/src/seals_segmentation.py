@@ -4,6 +4,26 @@ from PIL import Image
 from dibco import dibco_transform_gray_input
 import torch
 import json
+import torchvision
+
+
+def random_multicrop_to(dst_wh, *tensors):
+    assert len(tensors) > 0
+    assert len(tensors[0].size()) == 3
+    src_w = tensors[0].size(2)
+    src_h = tensors[0].size(1)
+    dst_w, dst_h = dst_wh
+    left = torch.randint(0, src_w - dst_w, (1, 1)).item()
+    top = torch.randint(0, src_h - dst_h, (1, 1)).item()
+    right = left + dst_w
+    bottom = top + dst_h
+    res = []
+    for t in tensors:
+        assert len(t.size()) == 3
+        assert t.size(2) >= src_w
+        assert t.size(1) >= src_h
+        res.append(t[:, :, top:bottom, left:right])
+    return res
 
 
 def paint_boxes(res_sz, gt_dict, draw_class_list, erase_class_list, bg=1):
@@ -22,7 +42,16 @@ def paint_boxes(res_sz, gt_dict, draw_class_list, erase_class_list, bg=1):
 
 
 class SealDs:
-    def __init__(self, draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=["../../../ptlbp/data/1000CV/1000_CVCharters/*/*/*/*.seals.gt.json"], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco_transform_gray_input):
+    def crop_sample(self, img, gt, mask):
+        if self.desired_width is None and self.desired_height is None:
+            return img, gt, mask
+        else:
+            img, gt, mask = random_multicrop_to((self.desired_width, self.desired_height), img, gt, mask)
+            return img, gt, mask
+    
+    def __init__(self, draw_class_list=[], erase_class_list=["Wr:OldText"], file_glob_list=["../../../ptlbp/data/1000CV/1000_CVCharters/*/*/*/*.seals.gt.json"], extention_regex=".seals.gt.json", img_replace_glob=".img.*", input_transform=dibco_transform_gray_input, desired_width=None, desired_height=None):
+        self.desired_width = desired_width
+        self.desired_height = desired_height
         self.input_transform = input_transform
         all_gt_files = []
         for file_glob in file_glob_list:
@@ -38,7 +67,6 @@ class SealDs:
             if len(imgs) == 1:
                 self.gt_files.append(gt_file)
                 self.img_files.append(imgs[0])
-
             else:
                 #  print(f"img_glob: {img_glob} {len(imgs)}")
                 assert len(imgs) == 0, f"Found more than one image for {gt_file}"
@@ -50,7 +78,7 @@ class SealDs:
         gt[1, :, :] = 1
         gt_dict = json.load(open(self.gt_files[n]))
         mask = paint_boxes(gt.size(), gt_dict, self.draw_class_list, self.erase_class_list)
-        return input_img, gt, mask
+        return self.crop_sample(input_img, gt, mask)
 
     def __len__(self):
         return len(self.img_files)
