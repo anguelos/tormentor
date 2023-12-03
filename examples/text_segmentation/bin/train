@@ -60,7 +60,7 @@ def binarization_fscores(retrieved, relevant, epsilon=.0000000001):
     assert retrieved.size() == relevant.size()
     assert (len(retrieved.size()) == 3) or ((len(retrieved.size()) == 4))
     if retrieved.size(1) == 2:
-        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]
+        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]region_loss_scale
     if relevant.size(1) == 2:
         relevant = relevant[:, 0, :, :] > relevant[:, 1, :, :]
     retrieved = ~retrieved
@@ -111,7 +111,7 @@ def zip_some(dataloader1, dataloader2):
             yield datum1 + datum2
 
 
-def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
+def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer, region_loss_scale):
     net.train(True)
     device = next(net.parameters()).device
     epoch_losses = []
@@ -130,10 +130,9 @@ def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer):
         loss.sum().backward()
         epoch_fscores.append(binarization_fscores(outputs.detach(), targets.detach())[0])
 
-        
         r_outputs = net(r_inputs)
         loss = loss_fn(r_outputs * r_masks, r_targets * r_masks)
-        loss.sum().backward()
+        (loss.sum()* region_loss_scale).backward()
 
         optimizer.step()
         optimizer.zero_grad()
@@ -259,7 +258,8 @@ if __name__ == "__main__":
         "train_folder": "/tmp/train_images",
         "device": "cuda",
         "region_glob": "../../../didipcv/misc/1000_CVCharters/*/*/*/*.seals.gt.json",
-        "augmentation_str": "tormentor.RandomPlasmaShadow  ^ tormentor.RandomPlasmaContrast  ^ tormentor.RandomIdentity ^ tormentor.RandomFlip ^ tormentor.RandomBrightness ^ tormentor.RandomWrap ^ tormentor.RandomShred"
+        "augmentation_str": "tormentor.RandomPlasmaShadow  ^ tormentor.RandomPlasmaContrast  ^ tormentor.RandomIdentity ^ tormentor.RandomFlip ^ tormentor.RandomBrightness ^ tormentor.RandomWrap ^ tormentor.RandomShred",
+        "region_loss_scale": 0.03,
     }
     
     args, _ = fargv.fargv(params)
@@ -352,7 +352,7 @@ if __name__ == "__main__":
             validate_epoch(net, valloader, loss_fn)
         if args.mode == "train_region":
             for epoch in range(len(net.train_epochs), args.epochs):
-                region_train_epoch(net, trainloader, region_dataloader, loss_fn, optimizer)
+                region_train_epoch(net, trainloader, region_dataloader, loss_fn, optimizer, args.region_loss_scale)
                 net.train_epochs[-1]["lr"] = lr_scheduler.get_lr()
                 lr_scheduler.step()
                 if epoch % args.validation_freq == 0 or epoch == args.epochs -1:
