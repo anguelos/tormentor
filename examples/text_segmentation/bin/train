@@ -60,7 +60,7 @@ def binarization_fscores(retrieved, relevant, epsilon=.0000000001):
     assert retrieved.size() == relevant.size()
     assert (len(retrieved.size()) == 3) or ((len(retrieved.size()) == 4))
     if retrieved.size(1) == 2:
-        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]region_loss_scale
+        retrieved = retrieved[:, 0, :, :] > retrieved[:, 1, :, :]
     if relevant.size(1) == 2:
         relevant = relevant[:, 0, :, :] > relevant[:, 1, :, :]
     retrieved = ~retrieved
@@ -132,7 +132,7 @@ def region_train_epoch(net, dataloader, region_dataloader, loss_fn, optimizer, r
 
         r_outputs = net(r_inputs)
         loss = loss_fn(r_outputs * r_masks, r_targets * r_masks)
-        (loss.sum()* region_loss_scale).backward()
+        (loss.sum() * region_loss_scale).backward()
 
         optimizer.step()
         optimizer.zero_grad()
